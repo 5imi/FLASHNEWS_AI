@@ -12,6 +12,8 @@ import com.example.baseredy.flashnews.core.network.GeminiClient
 import com.example.baseredy.flashnews.feature.feed.BuildConfig
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val geminiClient = GeminiClient(BuildConfig.GEMINI_API_KEY)
@@ -45,7 +47,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         _selectedCategory.value = interests.firstOrNull() ?: "Toate"
     }
 
-    val articles: StateFlow<List<NewsArticle>> = combine(
+    val articles: Flow<PagingData<NewsArticle>> = combine(
         _selectedRegion,
         _selectedCategory,
         _showOnlyFavorites
@@ -57,10 +59,16 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             repository.getArticles(region, category)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.cachedIn(viewModelScope)
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
+
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage
 
     private val _chatResponse = MutableStateFlow<String?>(null)
     val chatResponse: StateFlow<String?> = _chatResponse
@@ -103,47 +111,57 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshNews() {
         viewModelScope.launch {
             _isLoading.value = true
-            val selectedLangs = prefsRepository.getLanguages()
+            _isOffline.value = false
+            _errorMessage.value = null
             
-            val newsApiKeys = listOf(BuildConfig.NEWS_API_KEY, BuildConfig.NEWS_API_KEY_ALT)
-            val newsDataKey = BuildConfig.NEWSDATA_IO_KEY
-            val mediastackKey = BuildConfig.MEDIASTACK_KEY
+            try {
+                val selectedLangs = prefsRepository.getLanguages()
+                
+                val newsApiKeys = listOf(BuildConfig.NEWS_API_KEY, BuildConfig.NEWS_API_KEY_ALT)
+                val newsDataKey = BuildConfig.NEWSDATA_IO_KEY
+                val mediastackKey = BuildConfig.MEDIASTACK_KEY
 
-            val apiCategory = when (_selectedCategory.value) {
-                "Toate", "General" -> "General"
-                "Fiscalitate", "Business" -> "Business"
-                "Politică" -> "Politics"
-                "Tehnologie" -> "Technology"
-                "Știință" -> "Science"
-                "Sport" -> "Sports"
-                "Sănătate" -> "Health"
-                "Divertisment" -> "Entertainment"
-                else -> "General"
-            }
+                val apiCategory = when (_selectedCategory.value) {
+                    "Toate", "General" -> "General"
+                    "Fiscalitate", "Business" -> "Business"
+                    "Politică" -> "Politics"
+                    "Tehnologie" -> "Technology"
+                    "Știință" -> "Science"
+                    "Sport" -> "Sports"
+                    "Sănătate" -> "Health"
+                    "Divertisment" -> "Entertainment"
+                    else -> "General"
+                }
 
-            if (_selectedRegion.value == "RO") {
-                repository.refreshNews(
-                    newsApiKeys = newsApiKeys,
-                    newsDataKey = newsDataKey,
-                    mediastackKey = mediastackKey,
-                    region = "RO",
-                    category = apiCategory,
-                    language = "ro"
-                )
-            } else {
-                // Fetch for all selected languages
-                selectedLangs.forEach { lang ->
+                if (_selectedRegion.value == "RO") {
                     repository.refreshNews(
                         newsApiKeys = newsApiKeys,
                         newsDataKey = newsDataKey,
                         mediastackKey = mediastackKey,
-                        region = "GLOBAL",
+                        region = "RO",
                         category = apiCategory,
-                        language = lang
+                        language = "ro"
                     )
+                } else {
+                    // Fetch for all selected languages
+                    selectedLangs.forEach { lang ->
+                        repository.refreshNews(
+                            newsApiKeys = newsApiKeys,
+                            newsDataKey = newsDataKey,
+                            mediastackKey = mediastackKey,
+                            region = "GLOBAL",
+                            category = apiCategory,
+                            language = lang
+                        )
+                    }
                 }
+            } catch (e: Exception) {
+                _isOffline.value = true
+                _errorMessage.value = "Eroare conexiune: Verifică internetul. Se afișează datele offline."
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 }

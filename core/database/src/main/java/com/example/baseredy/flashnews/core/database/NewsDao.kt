@@ -3,19 +3,21 @@ package com.example.baseredy.flashnews.core.database
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
+import androidx.paging.PagingSource
+
 @Dao
 interface NewsDao {
     @Query("SELECT * FROM news_articles WHERE region = :region AND category = :category ORDER BY publishedAt DESC")
-    fun getArticlesByRegionAndCategory(region: String, category: String): Flow<List<NewsArticleEntity>>
+    fun getArticlesByRegionAndCategory(region: String, category: String): PagingSource<Int, NewsArticleEntity>
 
     @Query("SELECT * FROM news_articles WHERE region = :region ORDER BY publishedAt DESC")
-    fun getArticlesByRegion(region: String): Flow<List<NewsArticleEntity>>
+    fun getArticlesByRegion(region: String): PagingSource<Int, NewsArticleEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticles(articles: List<NewsArticleEntity>)
 
     @Query("SELECT * FROM news_articles WHERE isFavorite = 1 ORDER BY publishedAt DESC")
-    fun getFavoriteArticles(): Flow<List<NewsArticleEntity>>
+    fun getFavoriteArticles(): PagingSource<Int, NewsArticleEntity>
 
     @Query("UPDATE news_articles SET isFavorite = :isFavorite WHERE url = :url")
     suspend fun updateFavoriteStatus(url: String, isFavorite: Boolean)

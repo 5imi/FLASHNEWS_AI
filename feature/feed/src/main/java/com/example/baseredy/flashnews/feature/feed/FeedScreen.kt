@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -37,8 +38,10 @@ import com.example.baseredy.flashnews.core.model.NewsArticle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
-    val articles by viewModel.articles.collectAsState()
+    val articles = viewModel.articles.collectAsLazyPagingItems()
     val isLoading by viewModel.isLoading.collectAsState()
+    val isOffline by viewModel.isOffline.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
     val selectedRegion by viewModel.selectedRegion.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val showOnlyFavorites by viewModel.showOnlyFavorites.collectAsState()
@@ -49,7 +52,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(Unit) {
-        if (articles.isEmpty() && !showOnlyFavorites) {
+        if (articles.itemCount == 0 && !showOnlyFavorites) {
             viewModel.refreshNews()
         }
     }
@@ -59,22 +62,41 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         onRefresh = { viewModel.refreshNews() },
         modifier = Modifier.fillMaxSize().background(Color.Black)
     ) {
-        if (articles.isNotEmpty()) {
-            val pagerState = rememberPagerState(pageCount = { articles.size })
+        if (articles.itemCount > 0) {
+            val pagerState = rememberPagerState(pageCount = { articles.itemCount })
             VerticalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                key = { articles[it].url }
+                modifier = Modifier.fillMaxSize()
             ) { page ->
-                NewsCard(
-                    article = articles[page],
-                    onBookmark = { viewModel.toggleBookmark(articles[page]) },
-                    onClick = { selectedArticleForDetail = articles[page] }
-                )
+                val article = articles[page]
+                if (article != null) {
+                    NewsCard(
+                        article = article,
+                        onBookmark = { viewModel.toggleBookmark(article) },
+                        onClick = { selectedArticleForDetail = article }
+                    )
+                }
             }
         }
         
-        // Top Nav remains outside scroll if needed, or inside
+        // Error Banner
+        if (isOffline) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 100.dp, start = 16.dp, end = 16.dp)
+                    .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                    .align(Alignment.TopCenter)
+            ) {
+                Text(
+                    text = errorMessage ?: "Ești offline. Se afișează datele salvate local.",
+                    color = Color.White,
+                    modifier = Modifier.padding(12.dp),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+        }
     }
 
     // Top Nav overlayed

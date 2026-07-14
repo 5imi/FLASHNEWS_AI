@@ -16,27 +16,43 @@ import java.time.format.DateTimeFormatter
 import java.net.URL
 import kotlin.random.Random
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
+import kotlinx.coroutines.flow.map
+
 class NewsRepository(
     private val newsDao: NewsDao,
     private val aiClient: AiClient? = null
 ) {
 
-    fun getArticles(region: String, category: String): Flow<List<NewsArticle>> {
-        return if (category == "Toate") {
-            newsDao.getArticlesByRegion(region).map { entities ->
-                entities.map { it.toDomain() }
-            }
+    fun getArticles(region: String, category: String): Flow<PagingData<NewsArticle>> {
+        val pagingSourceFactory = if (category == "Toate") {
+            { newsDao.getArticlesByRegion(region) }
         } else {
-            newsDao.getArticlesByRegionAndCategory(region, category).map { entities ->
-                entities.map { it.toDomain() }
-            }
+            { newsDao.getArticlesByRegionAndCategory(region, category) }
+        }
+
+        return Pager(
+            config = PagingConfig(
+                pageSize = 20,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = pagingSourceFactory
+        ).flow.map { pagingData ->
+            pagingData.map { it.toDomain() }
         }
     }
 
-    fun getFavorites(): Flow<List<NewsArticle>> =
-        newsDao.getFavoriteArticles().map { entities ->
-            entities.map { it.toDomain() }
+    fun getFavorites(): Flow<PagingData<NewsArticle>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20),
+            pagingSourceFactory = { newsDao.getFavoriteArticles() }
+        ).flow.map { pagingData ->
+            pagingData.map { it.toDomain() }
         }
+    }
 
     suspend fun toggleFavorite(url: String, currentStatus: Boolean) {
         newsDao.updateFavoriteStatus(url, !currentStatus)
