@@ -44,3 +44,8 @@ data class SourceDto(
     val id: String? = null,
     val name: String? = null
 )
+
+data class AiInsight(
+    val title: String,
+    val content: String
+)

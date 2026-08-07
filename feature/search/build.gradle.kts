@@ -13,6 +13,7 @@ android {
         minSdk = 31
         
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
+        buildConfigField("String", "GROK_API_KEY", "\"${project.findProperty("GROK_API_KEY") ?: "grok_placeholder"}\"")
         buildConfigField("String", "NEWS_API_KEY", "\"${project.findProperty("NEWS_API_KEY") ?: ""}\"")
         buildConfigField("String", "NEWSDATA_IO_KEY", "\"${project.findProperty("NEWSDATA_IO_KEY") ?: ""}\"")
         buildConfigField("String", "MEDIASTACK_KEY", "\"${project.findProperty("MEDIASTACK_KEY") ?: ""}\"")
@@ -41,7 +42,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.2")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.material3)

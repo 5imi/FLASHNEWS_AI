@@ -6,8 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.baseredy.flashnews.core.data.NewsRepository
 import com.example.baseredy.flashnews.core.data.UserPreferencesRepository
 import com.example.baseredy.flashnews.core.database.NewsDatabase
+import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
 import com.example.baseredy.flashnews.core.network.GeminiClient
+import com.example.baseredy.flashnews.core.network.GrokClient
+import com.example.baseredy.flashnews.core.network.LocalAiClient
+import com.example.baseredy.flashnews.core.network.AiOrchestrator
 
 import com.example.baseredy.flashnews.feature.feed.BuildConfig
 import kotlinx.coroutines.flow.*
@@ -16,11 +20,20 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
+    // Initialize multi-agent AI system with orchestrator
     private val geminiClient = GeminiClient(BuildConfig.GEMINI_API_KEY)
+    private val grokClient = GrokClient(BuildConfig.GROK_API_KEY ?: "")
+    private val localClient = LocalAiClient()
+    
+    private val aiOrchestrator = AiOrchestrator(
+        fastAgent = geminiClient,      // For fast summarization
+        analyticalAgent = grokClient,  // For bias & analysis
+        localAgent = localClient       // For fallback/offline
+    )
     
     private val repository = NewsRepository(
         NewsDatabase.getDatabase(application).newsDao(),
-        geminiClient
+        aiOrchestrator
     )
     private val prefsRepository = UserPreferencesRepository(application)
 
@@ -36,7 +49,10 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val _onboardingCompleted = MutableStateFlow(prefsRepository.isOnboardingCompleted())
     val onboardingCompleted: StateFlow<Boolean> = _onboardingCompleted
 
-    val categories = listOf("Toate", "Politică", "Business", "Fiscalitate", "Tehnologie", "Știință", "Sport", "Sănătate", "Divertisment")
+    val categories = listOf(
+        "Toate", "General", "Business & Finanțe", "Politică", "Tehnologie", 
+        "Sport", "Auto", "Știință & Mediu", "Sănătate", "Lifestyle", "Educație"
+    )
 
     fun completeOnboarding(languages: Set<String>, interests: Set<String>) {
         prefsRepository.setLanguages(languages)
@@ -73,8 +89,13 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val _chatResponse = MutableStateFlow<String?>(null)
     val chatResponse: StateFlow<String?> = _chatResponse
 
+    private val _aiInsights = MutableStateFlow<List<AiInsight>>(emptyList())
+    val aiInsights: StateFlow<List<AiInsight>> = _aiInsights
+
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading
+
+    private val insightsCache = mutableMapOf<String, List<AiInsight>>()
 
     fun onRegionSelected(region: String) {
         _selectedRegion.value = region
@@ -104,8 +125,25 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun loadAiInsights(article: NewsArticle) {
+        viewModelScope.launch {
+            // Check cache first
+            insightsCache[article.url]?.let {
+                _aiInsights.value = it
+                return@launch
+            }
+
+            _isChatLoading.value = true
+            val insights = repository.getAiInsights(article)
+            insightsCache[article.url] = insights
+            _aiInsights.value = insights
+            _isChatLoading.value = false
+        }
+    }
+
     fun clearChat() {
         _chatResponse.value = null
+        _aiInsights.value = emptyList()
     }
 
     fun refreshNews() {
@@ -121,17 +159,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                 val newsDataKey = BuildConfig.NEWSDATA_IO_KEY
                 val mediastackKey = BuildConfig.MEDIASTACK_KEY
 
-                val apiCategory = when (_selectedCategory.value) {
-                    "Toate", "General" -> "General"
-                    "Fiscalitate", "Business" -> "Business"
-                    "Politică" -> "Politics"
-                    "Tehnologie" -> "Technology"
-                    "Știință" -> "Science"
-                    "Sport" -> "Sports"
-                    "Sănătate" -> "Health"
-                    "Divertisment" -> "Entertainment"
-                    else -> "General"
-                }
+                val currentCategory = _selectedCategory.value
 
                 if (_selectedRegion.value == "RO") {
                     repository.refreshNews(
@@ -139,7 +167,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                         newsDataKey = newsDataKey,
                         mediastackKey = mediastackKey,
                         region = "RO",
-                        category = apiCategory,
+                        category = currentCategory,
                         language = "ro"
                     )
                 } else {
@@ -150,7 +178,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                             newsDataKey = newsDataKey,
                             mediastackKey = mediastackKey,
                             region = "GLOBAL",
-                            category = apiCategory,
+                            category = currentCategory,
                             language = lang
                         )
                     }

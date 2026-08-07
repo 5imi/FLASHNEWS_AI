@@ -1,7 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp") version "2.0.21-1.0.25"
+    id("org.jetbrains.kotlin.kapt")
 }
 
 android {
@@ -27,10 +27,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     
     // Room
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.7.2"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
+    kapt("androidx.room:room-compiler:$roomVersion")
     
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.room.paging)

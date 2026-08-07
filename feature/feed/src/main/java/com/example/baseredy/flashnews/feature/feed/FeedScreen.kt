@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +47,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val showOnlyFavorites by viewModel.showOnlyFavorites.collectAsState()
     val chatResponse by viewModel.chatResponse.collectAsState()
+    val aiInsights by viewModel.aiInsights.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     
     var selectedArticleForDetail by remember { mutableStateOf<NewsArticle?>(null) }
@@ -54,6 +56,12 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     LaunchedEffect(Unit) {
         if (articles.itemCount == 0 && !showOnlyFavorites) {
             viewModel.refreshNews()
+        }
+    }
+
+    LaunchedEffect(selectedArticleForDetail) {
+        selectedArticleForDetail?.let { article ->
+            viewModel.loadAiInsights(article)
         }
     }
 
@@ -122,6 +130,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
             ArticleDetailContent(
                 article = selectedArticleForDetail!!,
                 chatResponse = chatResponse,
+                aiInsights = aiInsights,
                 isChatLoading = isChatLoading,
                 onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) }
             )
@@ -309,6 +318,7 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
 fun ArticleDetailContent(
     article: NewsArticle,
     chatResponse: String?,
+    aiInsights: List<AiInsight>,
     isChatLoading: Boolean,
     onAskQuestion: (String) -> Unit
 ) {
@@ -432,11 +442,53 @@ fun ArticleDetailContent(
             }
         }
 
-        // CHAT SECTION (THE INNOVATION)
+        // AI ASSISTANT SECTION
         Spacer(modifier = Modifier.height(32.dp))
-        Text("ÎNTREABĂ AI-UL DESPRE ASTA", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Text("ASISTENTUL AI", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+                AssistChip(
+                    onClick = { onAskQuestion("Explică simplu această știre în 2 propoziții.") },
+                    label = { Text("Explică simplu") },
+                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp)) }
+                )
+            }
+            item {
+                AssistChip(
+                    onClick = { onAskQuestion("Spune-mi de ce contează această știre pentru România.") },
+                    label = { Text("Impact local") },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp)) }
+                )
+            }
+            item {
+                AssistChip(
+                    onClick = { onAskQuestion("Ce trebuie să verific înainte să cred această știre?") },
+                    label = { Text("Ce să verific") },
+                    leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(18.dp)) }
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
+        if (aiInsights.isNotEmpty()) {
+            aiInsights.forEach { insight ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(insight.title, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(insight.content, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, lineHeight = 18.sp)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         TextField(
             value = questionText,
             onValueChange = { questionText = it },

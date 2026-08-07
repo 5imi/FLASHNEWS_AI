@@ -26,7 +26,7 @@ dependencies {
     api(project(":core:database"))
     
     implementation(libs.androidx.core.ktx)
-    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.2")
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.work.runtime.ktx)
 }

@@ -5,6 +5,8 @@ import com.google.ai.client.generativeai.type.BlockThreshold
 import com.google.ai.client.generativeai.type.HarmCategory
 import com.google.ai.client.generativeai.type.SafetySetting
 import com.google.ai.client.generativeai.type.content
+import kotlinx.coroutines.delay
+import java.security.MessageDigest
 
 class GeminiClient(apiKey: String) : AiClient {
     private val safetySettings = listOf(
@@ -15,75 +17,143 @@ class GeminiClient(apiKey: String) : AiClient {
     )
 
     private val model = GenerativeModel(
-        modelName = "gemini-2.5-flash",
+        modelName = "gemini-1.5-flash",
         apiKey = apiKey,
         safetySettings = safetySettings
     )
 
-    override suspend fun summarize(title: String, description: String): String {
-        return try {
-            val response = model.generateContent(
-                content {
-                    text("Ești un jurnalist expert. Rezumă această știre în 3 puncte scurte și clare, fiecare de maxim 12 cuvinte. Răspunde EXCLUSIV în LIMBA ROMÂNĂ, indiferent de limba sursei. Format: un punct pe linie, începând cu •. Titlu: $title. Descriere: $description")
-                }
-            )
-            response.text ?: ""
-        } catch (e: Exception) {
-            "• Sumar indisponibil în română\n• Detalii în articol\n• Verifică sursa originală"
+    // Simple in-memory cache: key -> value
+    private val cache = mutableMapOf<String, String>()
+    private var lastApiCallTime = 0L
+    private val minDelayBetweenCalls = 100L // 100ms to respect rate limits
+
+    private fun hashInput(vararg inputs: String): String {
+        val combined = inputs.joinToString("|")
+        return MessageDigest.getInstance("SHA-256")
+            .digest(combined.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+            .take(16)
+    }
+
+    private fun getCacheKey(operation: String, vararg inputs: String): String {
+        return "$operation:${hashInput(*inputs)}"
+    }
+
+    private suspend fun rateLimitedCall(block: suspend () -> String): String {
+        val now = System.currentTimeMillis()
+        val timeSinceLastCall = now - lastApiCallTime
+        if (timeSinceLastCall < minDelayBetweenCalls) {
+            delay(minDelayBetweenCalls - timeSinceLastCall)
+        }
+        lastApiCallTime = System.currentTimeMillis()
+        return block()
+    }
+
+    override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
+        val cacheKey = getCacheKey("summarize", title, description)
+        cache[cacheKey]?.let { return it }
+
+        return rateLimitedCall {
+            try {
+                val truncDesc = description.take(300) // Limit input to reduce tokens
+                val response = model.generateContent(
+                    content {
+                        text("Rezumă rapid în 2-3 puncte scurte:\nTitlu: $title\nDescriere: $truncDesc\nRăspunde în ROMÂNĂ, cu •, maxim 10 cuvinte/punct.")
+                    }
+                )
+                response.text?.let { result ->
+                    cache[cacheKey] = result
+                    result
+                } ?: "• Sumar disponibil\n• Verifica articolul"
+            } catch (e: Exception) {
+                "• Sumar disponibil\n• Verifica articolul"
+            }
         }
     }
 
-    override suspend fun analyzeBias(source: String, title: String): String {
-        return try {
-            val response = model.generateContent(
-                content {
-                    text("Ești un expert în analiza media. Analizează înclinația politică sau editorială a acestei știri din sursa '$source'. Răspunde cu UN SINGUR CUVÂNT în română: NEUTRU, STÂNGA, DREAPTA sau PROPAGANDĂ. Titlu: $title")
-                }
-            )
-            response.text?.trim()?.uppercase() ?: "NEUTRU"
-        } catch (e: Exception) {
-            "NEUTRU"
+    override suspend fun analyzeBias(source: String, title: String, category: String, region: String): String {
+        val cacheKey = getCacheKey("bias", source, title)
+        cache[cacheKey]?.let { return it }
+
+        return rateLimitedCall {
+            try {
+                val response = model.generateContent(
+                    content {
+                        text("Sursa: $source\nTitlu: $title\nO SINGURA CUVANT: NEUTRU, STANGA, DREAPTA sau PROPAGANDA")
+                    }
+                )
+                response.text?.trim()?.uppercase()?.let { result ->
+                    val valid = setOf("NEUTRU", "STANGA", "DREAPTA", "PROPAGANDA")
+                    val bias = if (result in valid) result else "NEUTRU"
+                    cache[cacheKey] = bias
+                    bias
+                } ?: "NEUTRU"
+            } catch (e: Exception) {
+                "NEUTRU"
+            }
         }
     }
 
     override suspend fun comparePerspectives(articles: List<String>): String {
         if (articles.size < 2) return ""
-        return try {
-            val combinedText = articles.joinToString("\n---\n")
-            val response = model.generateContent(
-                content {
-                    text("Ai mai multe articole despre același subiect din surse diferite: $combinedText. Analizează diferențele de perspectivă și eventualele contradicții. Oferă un rezumat comparativ scurt (max 100 cuvinte) în limba ROMÂNĂ care să evidențieze punctele comune și diferențele majore între narațiuni.")
-                }
-            )
-            response.text ?: ""
-        } catch (e: Exception) {
-            ""
+        
+        val cacheKey = getCacheKey("compare", *articles.toTypedArray())
+        cache[cacheKey]?.let { return it }
+
+        return rateLimitedCall {
+            try {
+                val truncated = articles.take(2).map { it.take(200) }.joinToString("\n---\n")
+                val response = model.generateContent(
+                    content {
+                        text("Compara rapid aceste 2 articole.\nDiferente majore:\n$truncated\nRezumat 50 cuvinte in ROMANA.")
+                    }
+                )
+                response.text?.let { result ->
+                    cache[cacheKey] = result
+                    result
+                } ?: ""
+            } catch (e: Exception) {
+                ""
+            }
         }
     }
 
     override suspend fun askQuestion(articleContext: String, question: String): String {
-        return try {
-            val response = model.generateContent(
-                content {
-                    text("Context articol: $articleContext\n\nÎntrebare utilizator: $question\n\nEști un asistent inteligent numit FlashNews AI. Răspunde util, concis și obiectiv la întrebarea despre acest articol, EXCLUSIV în limba ROMÂNĂ.")
-                }
-            )
-            response.text ?: "Nu pot răspunde momentan."
-        } catch (e: Exception) {
-            "Eroare de conexiune AI."
+        // Don't cache questions - they're user-specific
+        return rateLimitedCall {
+            try {
+                val truncCtx = articleContext.take(400)
+                val response = model.generateContent(
+                    content {
+                        text("Articol: $truncCtx\n\nIntrebare: $question\n\nRaspunde concis in ROMANA, max 100 cuvinte.")
+                    }
+                )
+                response.text ?: "Nu pot raspunde acum."
+            } catch (e: Exception) {
+                "Eroare AI - verificati conexiunea."
+            }
         }
     }
 
-    override suspend fun analyzeLocalImpact(title: String, description: String): String {
-        return try {
-            val response = model.generateContent(
-                content {
-                    text("Titlu: $title\nDescriere: $description\n\nEști un analist geopolitic și economic. Explică pe scurt (max 2 fraze) de ce această știre internațională este relevantă pentru un cetățean din ROMÂNIA sau ce impact ar putea avea asupra țării noastre. Răspunde în ROMÂNĂ.")
-                }
-            )
-            response.text ?: ""
-        } catch (e: Exception) {
-            ""
+    override suspend fun analyzeLocalImpact(title: String, description: String, region: String): String {
+        val cacheKey = getCacheKey("impact", title, region)
+        cache[cacheKey]?.let { return it }
+
+        return rateLimitedCall {
+            try {
+                val truncDesc = description.take(250)
+                val response = model.generateContent(
+                    content {
+                        text("Impact asupra ROMANIEI:\nTitlu: $title\nContext: $truncDesc\n1-2 fraze, ROMANA, max 50 cuvinte.")
+                    }
+                )
+                response.text?.let { result ->
+                    cache[cacheKey] = result
+                    result
+                } ?: ""
+            } catch (e: Exception) {
+                ""
+            }
         }
     }
 }

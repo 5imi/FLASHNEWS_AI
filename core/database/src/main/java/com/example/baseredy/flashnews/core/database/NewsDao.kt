@@ -23,7 +23,7 @@ interface NewsDao {
     suspend fun updateFavoriteStatus(url: String, isFavorite: Boolean)
 
     @Query("SELECT isFavorite FROM news_articles WHERE url = :url")
-    suspend fun isArticleFavorite(url: String): Boolean?
+    suspend fun isArticleFavorite(url: String): Boolean
 
     @Query("SELECT * FROM news_articles WHERE url = :url LIMIT 1")
     suspend fun getArticleByUrl(url: String): NewsArticleEntity?

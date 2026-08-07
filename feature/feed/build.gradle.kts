@@ -14,6 +14,7 @@ android {
         
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
+        buildConfigField("String", "GROK_API_KEY", "\"${project.findProperty("GROK_API_KEY") ?: "grok_placeholder"}\"")
         buildConfigField("String", "NEWS_API_KEY", "\"${project.findProperty("NEWS_API_KEY") ?: ""}\"")
         buildConfigField("String", "NEWS_API_KEY_ALT", "\"${project.findProperty("NEWS_API_KEY_ALT") ?: ""}\"")
         buildConfigField("String", "NEWSDATA_IO_KEY", "\"${project.findProperty("NEWSDATA_IO_KEY") ?: ""}\"")
@@ -42,7 +43,7 @@ dependencies {
     implementation(project(":core:data"))
 
     implementation(libs.androidx.core.ktx)
-    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-runtime:2.7.2")
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

@@ -13,13 +13,14 @@ android {
         applicationId = "com.example.baseredy.flashnews"
         minSdk = 31
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2.5"
+        versionCode = 5
+        versionName = "1.2.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
+        buildConfigField("String", "GROK_API_KEY", "\"${project.findProperty("GROK_API_KEY") ?: "grok_placeholder"}\"")
         buildConfigField("String", "NEWS_API_KEY", "\"${project.findProperty("NEWS_API_KEY") ?: ""}\"")
         buildConfigField("String", "NEWS_API_KEY_ALT", "\"${project.findProperty("NEWS_API_KEY_ALT") ?: ""}\"")
         buildConfigField("String", "NEWSDATA_IO_KEY", "\"${project.findProperty("NEWSDATA_IO_KEY") ?: ""}\"")
@@ -50,6 +51,7 @@ android {
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:data"))
     implementation(project(":core:network"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:feed"))
