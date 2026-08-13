@@ -12,12 +12,12 @@ data class NewsArticleEntity(
     val publishedAt: String,
     val sourceName: String?,
     val category: String,
-    val aiSummary: List<String> = emptyList(),
-    val factCheckStatus: String = "PENDING",
-    val factCheckReason: String = "",
-    val biasType: String = "NEUTRAL",
     val isFavorite: Boolean = false,
     val region: String = "GLOBAL",
     val isMultiPerspective: Boolean = false,
-    val localImpact: String? = null
+    // AI Persistence fields
+    val aiSummary: String? = null,
+    val aiBias: String? = null,
+    val aiLocalImpact: String? = null,
+    val aiAnalyzedAt: Long? = null
 )

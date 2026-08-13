@@ -1,17 +1,7 @@
 package com.example.baseredy.flashnews.core.database
 
 import androidx.room.TypeConverter
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 class Converters {
-    @TypeConverter
-    fun fromList(value: List<String>): String {
-        return Json.encodeToString(value)
-    }
-
-    @TypeConverter
-    fun toList(value: String): List<String> {
-        return Json.decodeFromString(value)
-    }
+    // Current schema doesn't require list conversion, keeping class for future extensions
 }

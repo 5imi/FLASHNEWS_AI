@@ -27,4 +27,10 @@ interface NewsDao {
 
     @Query("SELECT * FROM news_articles WHERE url = :url LIMIT 1")
     suspend fun getArticleByUrl(url: String): NewsArticleEntity?
+
+    @Query("UPDATE news_articles SET aiSummary = :summary, aiBias = :bias, aiLocalImpact = :impact, aiAnalyzedAt = :analyzedAt WHERE url = :url")
+    suspend fun updateAiAnalysis(url: String, summary: String?, bias: String?, impact: String?, analyzedAt: Long?)
+
+    @Query("DELETE FROM news_articles WHERE isFavorite = 0 AND publishedAt < :threshold")
+    suspend fun deleteOldArticles(threshold: String)
 }

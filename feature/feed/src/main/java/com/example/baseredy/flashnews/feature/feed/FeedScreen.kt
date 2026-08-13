@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
+import com.example.baseredy.flashnews.core.designsystem.component.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +86,13 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                     )
                 }
             }
+        } else if (!isLoading) {
+            EmptyState(
+                title = if (showOnlyFavorites) "Nicio știre salvată" else "Nicio știre găsită",
+                description = if (showOnlyFavorites) "Începe să salvezi știri din flux pentru a le vedea aici." else "Nu am putut găsi știri. Verifică conexiunea sau schimbă filtrele.",
+                icon = if (showOnlyFavorites) Icons.Default.Bookmarks else Icons.Default.Newspaper,
+                onRetry = { viewModel.refreshNews() }
+            )
         }
         
         // Error Banner
@@ -301,11 +309,13 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("AI DIGEST", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.5.sp)
                     }
-                    article.aiSummary.forEach { point ->
+                    val points = article.aiSummary?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+                    points.forEach { point ->
                         Row(modifier = Modifier.padding(top = 8.dp)) {
+                            val displayPoint = point.trim().removePrefix("•").trim()
                             Text("•", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(point, color = Color.White.copy(alpha = 0.9f), fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(displayPoint, color = Color.White.copy(alpha = 0.9f), fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -355,8 +365,8 @@ fun ArticleDetailContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Personal Impact for Romania (The "Fita")
-        article.localImpact?.let { impact ->
+        // Personal Impact for Romania
+        article.aiLocalImpact?.let { impact ->
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
@@ -383,8 +393,9 @@ fun ArticleDetailContent(
             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
+                val timeLabel = article.aiAnalyzedAt?.let { " (analizat acum ${formatTimestamp(it)})" } ?: ""
                 Text(
-                    "Rezumat generat și tradus automat de AI pentru rapiditate. Verifică sursa originală pentru context complet.",
+                    "Rezumat generat și tradus automat de AI$timeLabel. Verifică sursa originală pentru context complet.",
                     fontSize = 12.sp,
                     color = Color.White.copy(alpha = 0.7f)
                 )
@@ -394,11 +405,11 @@ fun ArticleDetailContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         // AI Insight Section
-        val biasColor = when (article.biasType) {
+        val biasColor = when (article.aiBias) {
             "NEUTRU" -> Color(0xFF4CAF50)
             "DREAPTA" -> Color(0xFFF44336)
             "STÂNGA" -> Color(0xFF2196F3)
-            "PROPAGANDĂ" -> Color(0xFFFFEB3B)
+            "PROPAGANDĂ", "PROPAGANDA" -> Color(0xFFFFEB3B)
             else -> Color.White
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))) {
@@ -412,15 +423,16 @@ fun ArticleDetailContent(
                 Row {
                     Text("Înclinație Editorială: ", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Text(
-                        text = article.biasType, 
+                        text = article.aiBias ?: "NEUTRU", 
                         color = biasColor, 
                         fontSize = 14.sp, 
-                        fontWeight = if (article.biasType == "PROPAGANDĂ") FontWeight.ExtraBold else FontWeight.Bold
+                        fontWeight = if (article.aiBias == "PROPAGANDĂ" || article.aiBias == "PROPAGANDA") FontWeight.ExtraBold else FontWeight.Bold
                     )
                 }
                 Text(article.factCheckReason, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
             }
         }
+
 
         if (article.isMultiPerspective) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -548,6 +560,16 @@ fun ArticleDetailContent(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Citește Articolul Complet")
         }
+    }
+}
+
+private fun formatTimestamp(timestamp: Long): String {
+    val diff = System.currentTimeMillis() - timestamp
+    val minutes = diff / 60000
+    return when {
+        minutes < 1 -> "câteva secunde"
+        minutes < 60 -> "$minutes minute"
+        else -> "${minutes / 60} ore"
     }
 }
 

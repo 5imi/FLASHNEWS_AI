@@ -8,10 +8,12 @@ import com.example.baseredy.flashnews.core.data.UserPreferencesRepository
 import com.example.baseredy.flashnews.core.database.NewsDatabase
 import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
+import com.example.baseredy.flashnews.core.network.AiOrchestrator
 import com.example.baseredy.flashnews.core.network.GeminiClient
 import com.example.baseredy.flashnews.core.network.GrokClient
+import com.example.baseredy.flashnews.core.network.GroqClient
+import com.example.baseredy.flashnews.core.network.OpenRouterClient
 import com.example.baseredy.flashnews.core.network.LocalAiClient
-import com.example.baseredy.flashnews.core.network.AiOrchestrator
 
 import com.example.baseredy.flashnews.feature.feed.BuildConfig
 import kotlinx.coroutines.flow.*
@@ -23,12 +25,16 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     // Initialize multi-agent AI system with orchestrator
     private val geminiClient = GeminiClient(BuildConfig.GEMINI_API_KEY)
     private val grokClient = GrokClient(BuildConfig.GROK_API_KEY ?: "")
+    private val groqClient = GroqClient(BuildConfig.GROQ_API_KEY)
+    private val openRouterClient = OpenRouterClient(BuildConfig.OPENROUTER_API_KEY)
     private val localClient = LocalAiClient()
     
     private val aiOrchestrator = AiOrchestrator(
-        fastAgent = geminiClient,      // For fast summarization
-        analyticalAgent = grokClient,  // For bias & analysis
-        localAgent = localClient       // For fallback/offline
+        fastAgent = geminiClient,
+        analyticalAgent = grokClient,
+        groqAgent = groqClient,
+        openRouterAgent = openRouterClient,
+        localAgent = localClient
     )
     
     private val repository = NewsRepository(

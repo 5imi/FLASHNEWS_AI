@@ -10,16 +10,17 @@ data class NewsArticle(
     val urlToImage: String? = null,
     val publishedAt: String,
     val sourceName: String? = null,
-    val aiSummary: List<String> = emptyList(),
+    val aiSummary: String? = null,
+    val aiBias: String? = null,
+    val aiLocalImpact: String? = null,
+    val aiAnalyzedAt: Long? = null,
     val factCheckStatus: String = "PENDING",
     val factCheckReason: String = "",
-    val biasType: String = "NEUTRAL", // NEUTRAL, LEFT, RIGHT, CLICKBAIT
     val isFavorite: Boolean = false,
     val relativeTime: String = "",
     val sourceLogoUrl: String = "",
     val region: String = "GLOBAL",
-    val isMultiPerspective: Boolean = false,
-    val localImpact: String? = null
+    val isMultiPerspective: Boolean = false
 )
 
 @Serializable

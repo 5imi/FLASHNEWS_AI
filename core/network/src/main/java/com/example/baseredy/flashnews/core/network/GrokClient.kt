@@ -1,5 +1,7 @@
 package com.example.baseredy.flashnews.core.network
 
+import android.util.Log
+
 /**
  * Grok AI Client from xAI - specialized for bias detection and analytical tasks.
  * Excellent for detecting political bias and real-time context analysis.
@@ -7,6 +9,7 @@ package com.example.baseredy.flashnews.core.network
  * If API key is not available, acts as fallback to local heuristics.
  */
 class GrokClient(private val apiKey: String) : AiClient {
+    private val TAG = "GrokClient"
 
     private val isAvailable = !apiKey.isNullOrBlank() && apiKey != "grok_placeholder"
     
@@ -14,11 +17,17 @@ class GrokClient(private val apiKey: String) : AiClient {
     private var lastApiCallTime = 0L
     private val minDelayBetweenCalls = 200L // Grok's free tier is more conservative
 
+    private fun cleanResponse(raw: String): String {
+        return raw.replace(Regex("```[a-z]*\\n?"), "")
+            .replace("```", "")
+            .trim()
+    }
+
     private fun getCacheKey(operation: String, vararg inputs: String): String {
         return "$operation:${inputs.joinToString("|").take(20)}"
     }
 
-    private suspend fun rateLimitedCall(block: suspend () -> String): String {
+    private suspend fun rateLimitedCall(operation: String, block: suspend () -> String): String {
         if (!isAvailable) {
             // If no valid API key, skip API call and return default
             return block()
@@ -30,18 +39,24 @@ class GrokClient(private val apiKey: String) : AiClient {
             kotlinx.coroutines.delay(minDelayBetweenCalls - timeSinceLastCall)
         }
         lastApiCallTime = System.currentTimeMillis()
-        return block()
+        
+        Log.d(TAG, "Starting Grok AI call: $operation")
+        return try {
+            val result = block()
+            Log.d(TAG, "Grok AI success: $operation")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Grok AI failed: $operation", e)
+            throw e
+        }
     }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
-        // Grok is better at analytical tasks, so we fallback for simple summarization
-        // This should ideally be handled by Gemini instead
         val cacheKey = getCacheKey("summarize", title)
         cache[cacheKey]?.let { return it }
 
         return try {
-            // In production, this would call Grok API endpoint
-            // For now, we return a fallback since Grok API integration requires setup
+            // Placeholder: Grok is better at analytical tasks, so we fallback for simple summarization
             val summary = "• ${title.take(40)}...\n• Sursa: $source\n• Verifică detaliile articolului"
             cache[cacheKey] = summary
             summary
@@ -51,14 +66,12 @@ class GrokClient(private val apiKey: String) : AiClient {
     }
 
     override suspend fun analyzeBias(source: String, title: String, category: String, region: String): String {
-        // Grok's strength: detecting bias and political leanings
         val cacheKey = getCacheKey("bias", source, title)
         cache[cacheKey]?.let { return it }
 
-        return rateLimitedCall {
-            try {
-                // Grok excels at detecting bias from real-time data and news patterns
-                // Analysis based on known source bias patterns
+        return try {
+            rateLimitedCall("analyzeBias") {
+                // Analysis based on known source bias patterns (fallback logic)
                 val bias = when {
                     // Left-leaning sources
                     source.contains("MSNBC", ignoreCase = true) ||
@@ -79,22 +92,21 @@ class GrokClient(private val apiKey: String) : AiClient {
 
                     // Neutral/balanced
                     else -> {
-                        // Additional heuristics for neutral sources
                         when {
                             source.contains("Reuters", ignoreCase = true) ||
                             source.contains("AP News", ignoreCase = true) ||
                             source.contains("BBC", ignoreCase = true) ||
                             source.contains("AFP", ignoreCase = true) -> "NEUTRU"
-                            else -> "NEUTRU" // Default to neutral
+                            else -> "NEUTRU"
                         }
                     }
                 }
 
                 cache[cacheKey] = bias
                 bias
-            } catch (e: Exception) {
-                "NEUTRU"
             }
+        } catch (e: Exception) {
+            "NEUTRU"
         }
     }
 
@@ -102,8 +114,8 @@ class GrokClient(private val apiKey: String) : AiClient {
         val cacheKey = getCacheKey("impact", title, region)
         cache[cacheKey]?.let { return it }
 
-        return rateLimitedCall {
-            try {
+        return try {
+            rateLimitedCall("analyzeLocalImpact") {
                 val impact = when {
                     region.contains("RO", ignoreCase = true) -> {
                         when {
@@ -118,47 +130,45 @@ class GrokClient(private val apiKey: String) : AiClient {
                             title.contains("Economie", ignoreCase = true) ->
                                 "Impact economic local: verifică cum se reflectă în impozite și costuri."
 
-                            else -> "Relevanta locală: urmărește cum se conectează cu actualitatea românească."
+                            else -> "Relevanță locală: urmărește cum se conectează cu actualitatea românească."
                         }
                     }
-                    else -> "Context global: considera cum se aplică la economia și politica locală."
+                    else -> "Context global: consideră cum se aplică la economia și politica locală."
                 }
 
                 cache[cacheKey] = impact
                 impact
-            } catch (e: Exception) {
-                ""
             }
+        } catch (e: Exception) {
+            ""
         }
     }
 
     override suspend fun askQuestion(articleContext: String, question: String): String {
-        return rateLimitedCall {
-            try {
-                val truncCtx = articleContext.take(300)
-                // Grok is good at nuanced analysis and debate
-                "Privind articolul: $truncCtx\n\nReferitor la întrebarea ta: ${question.take(100)}\n\nContextul sugerează aspecte pe care ar trebui să le explorezi mai aprofundat în sursele originale."
-            } catch (e: Exception) {
-                "Eroare Grok - verifică conexiunea."
+        return try {
+            rateLimitedCall("askQuestion") {
+                val truncCtx = articleContext.take(1500)
+                "Privind articolul: $truncCtx\n\nReferitor la întrebarea ta: ${question.take(200)}\n\nContextul sugerează aspecte pe care ar trebui să le explorezi mai aprofundat în sursele originale."
             }
+        } catch (e: Exception) {
+            "Eroare Grok - verifică conexiunea."
         }
     }
 
     override suspend fun comparePerspectives(articles: List<String>): String {
         if (articles.size < 2) return ""
         
-        return rateLimitedCall {
-            try {
-                // Grok excels at finding nuanced differences in perspectives
+        return try {
+            rateLimitedCall("comparePerspectives") {
                 val comparison = when (articles.size) {
                     2 -> "Comparație între 2 perspective: observ diferențe în ton și interpretare. Ambele surse au argumente valide dar din unghiuri diferite."
                     3 -> "Comparație între 3 perspective: consensul pe fapte, divergență pe interpretare. Recomandare: combină perspective pentru imagine completă."
                     else -> "Comparație între ${articles.size} perspective: cu cât mai multe surse, cu atât mai nuanțat tabloul general."
                 }
                 comparison
-            } catch (e: Exception) {
-                ""
             }
+        } catch (e: Exception) {
+            ""
         }
     }
 }

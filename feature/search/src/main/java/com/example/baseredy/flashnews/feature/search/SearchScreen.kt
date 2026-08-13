@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.baseredy.flashnews.core.model.NewsArticle
+import com.example.baseredy.flashnews.core.designsystem.component.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +82,13 @@ fun SearchScreen(viewModel: SearchViewModel, onBack: () -> Unit, onArticleClick:
 
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+            } else if (results.isEmpty() && query.isNotBlank()) {
+                EmptyState(
+                    title = "Niciun rezultat",
+                    description = "Nu am găsit nimic pentru \"$query\". Încearcă alte cuvinte cheie.",
+                    icon = Icons.Default.Search,
+                    onRetry = { viewModel.search(query) }
+                )
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     items(results) { article ->

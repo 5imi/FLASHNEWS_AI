@@ -168,6 +168,6 @@ If any rule conflicts with an explicit user instruction, always follow the user'
 
 ## 14. Key Moment Backups & Interactive Workflow
 
-* Create periodic backups/saves of the project in key moments (before major backend/dashboard changes and after verified milestones).
+* Create periodic backups/saves of the project in key moments (before major backend/dashboard changes and after verified milestones). **In this project, backups will be performed using Git commits with descriptive messages.**
 * Collaboration workflow: Guide the user step-by-step with clear ideas and precise instructions, implement code changes when instructed, and verify every modification rigorously.
 

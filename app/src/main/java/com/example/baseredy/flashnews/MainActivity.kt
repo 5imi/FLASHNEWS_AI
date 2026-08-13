@@ -1,5 +1,6 @@
 package com.example.baseredy.flashnews
 
+import android.content.Intent
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
@@ -25,6 +26,7 @@ import com.example.baseredy.flashnews.feature.search.SearchScreen
 import com.example.baseredy.flashnews.feature.search.SearchViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -35,6 +37,11 @@ class MainActivity : ComponentActivity() {
         if (isGranted) {
             setupWorkManager()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,6 +56,14 @@ class MainActivity : ComponentActivity() {
                 val feedViewModel: FeedViewModel = viewModel()
                 val onboardingCompleted by feedViewModel.onboardingCompleted.collectAsState()
                 
+                LaunchedEffect(intent) {
+                    intent?.getStringExtra("article_url")?.let { url ->
+                        // Navigate to detail if possible, or search for it
+                        // For now, we can at least ensure we are on feed
+                        navController.navigate("feed")
+                    }
+                }
+
                 NavHost(
                     navController = navController, 
                     startDestination = if (onboardingCompleted) "feed" else "onboarding"

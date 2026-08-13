@@ -21,7 +21,6 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
-import kotlinx.coroutines.flow.map
 
 class NewsRepository(
     private val newsDao: NewsDao,
@@ -87,10 +86,9 @@ class NewsRepository(
                 fetchFromMediastack(mediastackKey, category, language, entities)
             }
 
-            // 4. Fetch from RSS — folosim categoriile din RssSource
+            // 4. Fetch from RSS
             val shouldFetchRss = region == "RO" || category == "General" || category == "Toate" || entities.size < 5
             if (shouldFetchRss) {
-                println("RSS_DEBUG: Starting RSS fetch for region=$region, category=$category")
                 val rssItems = RssClient.fetchRssNews()
 
                 val filteredRss = rssItems.filter { item ->
@@ -98,68 +96,49 @@ class NewsRepository(
                     val categoryMatch = if (category == "Toate") true else item.category == category
                     regionMatch && categoryMatch
                 }
-                println("RSS_DEBUG: After filtering: ${filteredRss.size} items")
 
                 filteredRss.forEach { rss ->
-                    val existing = newsDao.getArticleByUrl(rss.link)
-                    if (existing != null) {
-                        entities.add(existing.copy(category = category))
-                    } else {
-                        delay(150) // Rate limit dla AI calls - free tier friendly
-                        
-                        // Use AI for summary, but with fallback
-                        val rawSummary = try {
-                            aiClient?.summarize(rss.title, rss.description, rss.sourceName, rss.category, rss.region)
-                        } catch (e: Exception) {
-                            null
-                        }
-                        val summary = rawSummary?.split("\n")?.filter { it.isNotBlank() }?.take(3) 
-                            ?: simulateAiSummary(rss.description, rss.sourceName, rss.category)
-
-                        val bias = try {
-                            aiClient?.analyzeBias(rss.sourceName, rss.title, rss.category, rss.region)
-                        } catch (e: Exception) {
-                            null
-                        } ?: simulateBias(rss.sourceName, rss.category)
-                        
-                        val (fcStatus, fcReason) = simulateFactCheck(rss.sourceName)
-
-                        // Impact local: calculat doar pentru știri cu AI activ
-                        val impact = if (rss.region != "RO" && rawSummary != null) {
-                            try {
-                                aiClient?.analyzeLocalImpact(rss.title, rss.description, rss.region)
-                            } catch (e: Exception) {
-                                null
-                            }
-                        } else null
-
-                        println("RSS_DEBUG: Adding article '${rss.title.take(50)}' from ${rss.sourceName}")
-                        entities.add(NewsArticleEntity(
-                            url = rss.link,
-                            title = rss.title,
-                            description = rss.description,
-                            urlToImage = rss.imageUrl,
-                            publishedAt = rss.pubDate,
-                            sourceName = rss.sourceName,
-                            category = rss.category,
-                            aiSummary = summary,
-                            factCheckStatus = fcStatus,
-                            factCheckReason = fcReason,
-                            biasType = bias,
-                            isFavorite = false,
-                            region = rss.region,
-                            isMultiPerspective = checkMultiPerspective(rss.title),
-                            localImpact = impact
-                        ))
-                    }
+                    processAndAddEntity(
+                        url = rss.link,
+                        title = rss.title,
+                        description = rss.description,
+                        imageUrl = rss.imageUrl,
+                        publishedAt = rss.pubDate,
+                        sourceName = rss.sourceName,
+                        category = rss.category,
+                        region = rss.region,
+                        entities = entities
+                    )
                 }
             }
 
-            // Remove potential duplicates by URL
-            val distinctEntities = entities.distinctBy { it.url }
-            newsDao.insertArticles(distinctEntities)
+            // Deduplication logic: Title-based grouping
+            val deduplicated = deduplicateByTitle(entities)
+            
+            // Final distinct by URL (Room Primary Key)
+            val finalEntities = deduplicated.distinctBy { it.url }
+            newsDao.insertArticles(finalEntities)
+            
+            // Cleanup old articles (older than 14 days)
+            val thresholdDate = ZonedDateTime.now().minusDays(14).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            newsDao.deleteOldArticles(thresholdDate)
+            
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun deduplicateByTitle(articles: List<NewsArticleEntity>): List<NewsArticleEntity> {
+        return articles.groupBy { 
+            it.title.lowercase()
+                .replace(Regex("[^a-z0-9 ]"), "")
+                .trim() 
+        }.map { (_, group) ->
+            // Keep the one with most info (has summary or image) or latest
+            group.maxByOrNull { 
+                (if (it.aiSummary != null) 10 else 0) + 
+                (if (it.urlToImage != null) 5 else 0)
+            } ?: group.first()
         }
     }
 
@@ -167,35 +146,34 @@ class NewsRepository(
         return try {
             val response = RetrofitClient.newsApi.searchNews(apiKey = apiKey, query = query)
             response.articles.map { dto ->
-                val rawSummary = try {
-                    aiClient?.summarize(dto.title, dto.description ?: "", dto.source?.name ?: "Unknown", "General", "GLOBAL")
-                } catch (e: Exception) {
-                    null
+                val existing = newsDao.getArticleByUrl(dto.url)
+                if (existing?.aiSummary != null) {
+                    existing.toDomain()
+                } else {
+                    val summary = try {
+                        aiClient?.summarize(dto.title, dto.description ?: "", dto.source?.name ?: "Unknown", "General", "GLOBAL")
+                    } catch (e: Exception) {
+                        simulateAiSummary(dto.description ?: dto.title)
+                    }
+                    
+                    val bias = try {
+                        aiClient?.analyzeBias(dto.source?.name ?: "Unknown", dto.title, "General", "GLOBAL")
+                    } catch (e: Exception) {
+                        simulateBias(dto.source?.name ?: "", "General")
+                    }
+                    
+                    NewsArticle(
+                        url = dto.url,
+                        title = dto.title,
+                        description = dto.description,
+                        urlToImage = dto.urlToImage,
+                        publishedAt = dto.publishedAt,
+                        sourceName = dto.source?.name,
+                        aiSummary = summary,
+                        aiBias = bias,
+                        isFavorite = newsDao.isArticleFavorite(dto.url)
+                    )
                 }
-                val summary = rawSummary?.split("\n")?.filter { it.isNotBlank() }?.take(3)
-                    ?: simulateAiSummary(dto.description ?: dto.title, dto.source?.name ?: "Unknown", "General")
-                
-                val bias = try {
-                    aiClient?.analyzeBias(dto.source?.name ?: "Unknown", dto.title, "General", "GLOBAL")
-                } catch (e: Exception) {
-                    null
-                } ?: simulateBias(dto.source?.name ?: "", "General")
-                
-                val (fcStatus, fcReason) = simulateFactCheck(dto.source?.name ?: "")
-                
-                NewsArticle(
-                    url = dto.url,
-                    title = dto.title,
-                    description = dto.description,
-                    urlToImage = dto.urlToImage,
-                    publishedAt = dto.publishedAt,
-                    sourceName = dto.source?.name,
-                    aiSummary = summary,
-                    factCheckStatus = fcStatus,
-                    factCheckReason = fcReason,
-                    biasType = bias,
-                    isFavorite = newsDao.isArticleFavorite(dto.url)
-                )
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -311,25 +289,27 @@ class NewsRepository(
         if (existing != null) {
             entities.add(existing.copy(category = category))
         } else {
-            delay(150) // Reduced delay for free tier
+            // Check if we already have this story by title (even if URL is different)
+            val normalizedTitle = title.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim()
+            val duplicate = entities.find { it.title.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim() == normalizedTitle }
             
-            val rawSummary = try {
+            if (duplicate != null) return
+
+            delay(100) // Respect AI rate limits
+            
+            val summary = try {
                 aiClient?.summarize(title, description ?: "", sourceName ?: "Unknown", category, region)
             } catch (e: Exception) {
-                null
+                simulateAiSummary(description ?: title)
             }
-            val summary = rawSummary?.split("\n")?.filter { it.isNotBlank() }?.take(3)
-                ?: simulateAiSummary(description ?: title, sourceName, category)
 
             val bias = try {
                 aiClient?.analyzeBias(sourceName ?: "Unknown", title, category, region)
             } catch (e: Exception) {
-                null
-            } ?: simulateBias(sourceName ?: "", category)
+                simulateBias(sourceName ?: "", category)
+            }
             
-            val (fcStatus, fcReason) = simulateFactCheck(sourceName ?: "")
-            
-            val impact = if (rawSummary != null && region != "GLOBAL") {
+            val impact = if (summary != null && region != "GLOBAL" && !summary.contains("indisponibil", ignoreCase = true)) {
                 try {
                     aiClient?.analyzeLocalImpact(title, description ?: "", region)
                 } catch (e: Exception) {
@@ -346,53 +326,34 @@ class NewsRepository(
                 sourceName = sourceName,
                 category = category,
                 aiSummary = summary,
-                factCheckStatus = fcStatus,
-                factCheckReason = fcReason,
-                biasType = bias,
+                aiBias = bias,
+                aiLocalImpact = impact,
+                aiAnalyzedAt = System.currentTimeMillis(),
                 isFavorite = false,
                 region = region,
-                isMultiPerspective = checkMultiPerspective(title),
-                localImpact = impact
+                isMultiPerspective = checkMultiPerspective(title)
             ))
         }
     }
 
-    private fun simulateAiSummary(text: String, sourceName: String? = null, category: String? = null): List<String> {
+    private fun simulateAiSummary(text: String): String {
         val cleaned = text.replace(Regex("<[^>]*>"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
         val sentences = Regex("(?<=[.!?])\\s+").split(cleaned)
             .filter { it.length > 8 }
-            .map { it.trim().removeSuffix(".") }
-            .take(3)
-
-        return if (sentences.isNotEmpty()) {
-            sentences
-        } else {
-            listOf(
-                "Sursă: ${sourceName ?: "necunoscută"}",
-                "Categorie: ${category ?: "general"}",
-                "Detalii în articol"
-            )
-        }
-    }
-
-    private fun simulateFactCheck(source: String): Pair<String, String> {
-        return when (Random.nextInt(100)) {
-            in 0..75 -> "VERIFIED" to "Sursă de încredere ($source) confirmată de multiple agenții de presă."
-            in 76..90 -> "PENDING" to "În curs de verificare. Informația este proaspătă."
-            else -> "UNVERIFIED" to "Sursă cu istoric de clickbait. Se recomandă prudență."
-        }
+            .take(2)
+            .joinToString("\n• ", prefix = "• ")
+        
+        return if (sentences.length > 5) sentences else "• Detalii indisponibile momentan.\n• Verifică sursa originală."
     }
 
     private fun simulateBias(source: String, category: String? = null): String {
         val normalizedSource = source.lowercase()
-        val normalizedCategory = category?.lowercase().orEmpty()
         return when {
             normalizedSource.contains("cnn") || normalizedSource.contains("bbc") || normalizedSource.contains("guardian") -> "NEUTRU"
             normalizedSource.contains("fox") || normalizedSource.contains("breitbart") -> "DREAPTA"
             normalizedSource.contains("buzzfeed") || normalizedSource.contains("huff") || normalizedSource.contains("politico") -> "STÂNGA"
-            normalizedCategory.contains("polit") -> "NEUTRU"
             else -> "NEUTRU"
         }
     }
@@ -405,36 +366,62 @@ class NewsRepository(
         publishedAt = publishedAt,
         sourceName = sourceName,
         aiSummary = aiSummary,
-        factCheckStatus = factCheckStatus,
-        factCheckReason = factCheckReason,
-        biasType = biasType,
+        aiBias = aiBias,
+        aiLocalImpact = aiLocalImpact,
+        aiAnalyzedAt = aiAnalyzedAt,
         isFavorite = isFavorite,
         relativeTime = formatRelativeTime(publishedAt),
         sourceLogoUrl = getFaviconUrl(url),
         region = region,
-        isMultiPerspective = isMultiPerspective,
-        localImpact = localImpact
+        isMultiPerspective = isMultiPerspective
     )
 
     suspend fun askAi(article: NewsArticle, question: String): String {
-        val context = "Titlu: ${article.title}. Descriere: ${article.description?.take(300) ?: ""}"
-        return try {
+        val context = "Titlu: ${article.title}. Descriere: ${article.description?.take(1500) ?: ""}"
+        val response = try {
             aiClient?.askQuestion(context, question) ?: "AI indisponibil."
         } catch (e: Exception) {
             "Eroare AI - verifică conexiunea."
         }
+        
+        // Update DB with this question as a temporary summary or just log it
+        // For now we just return it, but ensuring context is 1500 chars was the key.
+        return response
     }
 
     suspend fun getAiInsights(article: NewsArticle): List<AiInsight> {
-        // Optimized: Single AI call with structured output instead of 3 separate calls
+        // Reuse insights if they exist in DB and are fresh (less than 24h old)
+        val existing = newsDao.getArticleByUrl(article.url)
+        val aiSummary = existing?.aiSummary
+        val aiAnalyzedAt = existing?.aiAnalyzedAt
+        
+        if (aiSummary != null && aiAnalyzedAt != null) {
+            val age = System.currentTimeMillis() - aiAnalyzedAt
+            if (age < 24 * 3600 * 1000 && aiSummary.contains("===")) {
+                val sections = aiSummary.split("===").map { it.trim() }
+                if (sections.size >= 3) {
+                    val titles = listOf("Explică simplu", "Impact local", "Ce trebuie să verifici")
+                    return titles.mapIndexed { index, title ->
+                        AiInsight(title = title, content = sections[index])
+                    }
+                }
+            }
+        }
+
         val combinedPrompt = """
-            Pentru acest articol, oferă răspunsuri separate cu === între ele:
-            1. Explică simplu (2 fraze max, în română)
-            2. Impact pentru România (1-2 fraze)
-            3. 2-3 lucruri de verificat
+            Ești un analist media senior. Analizează acest articol și oferă 3 secțiuni separate EXACT prin secvența '===' între ele.
             
-            Articol: ${article.title}
-            Descriere: ${article.description?.take(250) ?: ""}
+            Titlu: ${article.title}
+            Sursă: ${article.sourceName}
+            Context: ${article.description?.take(1500) ?: ""}
+            
+            Secțiunea 1: Explică simplu (Ce s-a întâmplat defapt? 2-3 propoziții clare)
+            ===
+            Secțiunea 2: Impact pentru România (Cum ne afectează direct sau indirect? 1-2 propoziții)
+            ===
+            Secțiunea 3: Fact-check (2-3 puncte critice de verificat pentru a evita dezinformarea)
+            
+            Răspunde DOAR în limba ROMÂNĂ. Nu adăuga introduceri sau concluzii.
         """.trimIndent()
 
         return try {
@@ -442,18 +429,24 @@ class NewsRepository(
             val sections = fullResponse.split("===").map { it.trim() }
             
             val titles = listOf("Explică simplu", "Impact local", "Ce trebuie să verifici")
-            titles.mapIndexed { index, title ->
+            val insights = titles.mapIndexed { index, title ->
                 AiInsight(
                     title = title,
-                    content = if (index < sections.size) sections[index] else "Indisponibil."
+                    content = if (index < sections.size) sections[index] else "Informație indisponibilă."
                 )
             }
+            
+            // Persist the structured analysis for future use
+            if (sections.size >= 3) {
+                newsDao.updateAiAnalysis(article.url, fullResponse, article.aiBias, article.aiLocalImpact, System.currentTimeMillis())
+            }
+            
+            insights
         } catch (e: Exception) {
-            // Fallback insights
             listOf(
                 AiInsight(title = "Explică simplu", content = article.title),
-                AiInsight(title = "Impact local", content = "Verifică sursa pentru detalii."),
-                AiInsight(title = "Ce trebuie să verifici", content = "Compară cu alte surse fiabile.")
+                AiInsight(title = "Impact local", content = "Verifică sursa originală pentru detalii specifice."),
+                AiInsight(title = "Ce trebuie să verifici", content = "Compară informația cu alte publicații de încredere.")
             )
         }
     }

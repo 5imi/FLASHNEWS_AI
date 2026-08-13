@@ -40,7 +40,7 @@ class NewsSyncWorker(
                 val existing = db.newsDao().getArticleByUrl(importantNews.link)
                 
                 if (existing == null) {
-                    showNotification(importantNews.title, importantNews.sourceName)
+                    showNotification(importantNews.title, importantNews.sourceName, importantNews.link)
                 }
             }
 
@@ -51,7 +51,7 @@ class NewsSyncWorker(
         }
     }
 
-    private fun showNotification(title: String, source: String) {
+    private fun showNotification(title: String, source: String, articleUrl: String) {
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         
         val channelId = "flashnews_updates"
@@ -66,7 +66,11 @@ class NewsSyncWorker(
             manager.createNotificationChannel(channel)
         }
 
-        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(appContext.packageName)
+        val launchIntent = appContext.packageManager.getLaunchIntentForPackage(appContext.packageName)?.apply {
+            putExtra("article_url", articleUrl)
+            data = android.net.Uri.parse(articleUrl)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
             appContext,
             0,

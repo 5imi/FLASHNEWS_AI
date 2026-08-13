@@ -1,76 +1,52 @@
 package com.example.baseredy.flashnews.core.network
 
 /**
- * Local mock AI client - uses templates for offline/fallback scenarios.
- * Zero cost, no API calls, good for testing and failover.
+ * Local AI client - provides heuristic responses in Romanian for offline or failover scenarios.
  */
 class LocalAiClient : AiClient {
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
-        // Template-based summaries
-        val truncDesc = description.take(150)
-        return """
-            • ${title.take(40)}...
-            • Sursă: $source, Categorie: $category
-            • Citește articolul complet pentru context
-        """.trimIndent()
+        val summary = description.take(200).ifBlank { title.take(200) }
+        return "• $summary\n• Sursa: $source\n• Verifică articolul pentru detalii suplimentare."
     }
 
     override suspend fun analyzeBias(source: String, title: String, category: String, region: String): String {
-        // Simple heuristics for bias detection
         val biasIndicators = mapOf(
             "CNN" to "STÂNGA",
+            "MSNBC" to "STÂNGA",
             "FOX" to "DREAPTA",
+            "Breitbart" to "DREAPTA",
             "BBC" to "NEUTRU",
             "Reuters" to "NEUTRU",
             "AP" to "NEUTRU",
-            "RT" to "PROPAGANDA",
-            "TASS" to "PROPAGANDA"
+            "RT" to "PROPAGANDĂ",
+            "TASS" to "PROPAGANDĂ",
+            "Sputnik" to "PROPAGANDĂ"
         )
         
-        return biasIndicators[source] ?: "NEUTRU"
+        return biasIndicators.entries.find { source.contains(it.key, ignoreCase = true) }?.value ?: "NEUTRU"
     }
 
     override suspend fun analyzeLocalImpact(title: String, description: String, region: String): String {
         return when {
-            title.contains("Fiscal", ignoreCase = true) || 
-            title.contains("Impozit", ignoreCase = true) ||
-            title.contains("Económie", ignoreCase = true) -> 
-                "Poate afecta bugetul personal și impozitele. Verifică ultimele anunțuri oficiale."
+            title.contains("Fiscal", ignoreCase = true) || title.contains("Impozit", ignoreCase = true) -> 
+                "Impact fiscal probabil: Poate afecta taxe și impozite în România."
             
-            title.contains("Brexit", ignoreCase = true) ||
-            title.contains("UE", ignoreCase = true) ||
-            title.contains("NATO", ignoreCase = true) ->
-                "Are implicații pentru România prin relații comerciale și securitate NATO."
+            title.contains("Preț", ignoreCase = true) || title.contains("Gaz", ignoreCase = true) || title.contains("Energie", ignoreCase = true) ->
+                "Impact economic: Posibile fluctuații ale prețurilor la nivel local."
             
-            else -> "Pune atenție la cum acesta se conectează cu politica locală română."
+            title.contains("UE", ignoreCase = true) || title.contains("NATO", ignoreCase = true) || title.contains("Război", ignoreCase = true) ->
+                "Relevanță geopolitică: Importanță strategică pentru securitatea României."
+            
+            else -> "Monitorizează contextul: Subiectul poate influența agenda publică românească."
         }
     }
 
     override suspend fun askQuestion(articleContext: String, question: String): String {
-        return when {
-            question.contains("ce", ignoreCase = true) ->
-                "Articolul spune: ${articleContext.take(100)}... Citește sursa originală pentru răspuns complet."
-            
-            question.contains("cum", ignoreCase = true) ->
-                "Documentația oficială sau sursele citate în articol ar trebui să clarifice acest aspect."
-            
-            question.contains("de ce", ignoreCase = true) ->
-                "Contextul în articol sugerează motivele. Consultă analiști sau comentatori pentru perspective mai profunde."
-            
-            else -> "Aceasta este o întrebare interesantă. Articolul oferă unele indicii - cere mai mult context din alte surse."
-        }
-    }
-
-    override suspend fun comparePerspectives(articles: List<String>): String {
-        return when (articles.size) {
-            0, 1 -> ""
-            else -> """
-                Comparație între ${articles.size} perspective:
-                • Toate articolele discută același subiect
-                • Diferențele pot fi în interpretare sau context
-                • Recomandare: Citește ambele surse pentru imagine completă
-            """.trimIndent()
-        }
+        val topic = articleContext.take(150).replace(Regex("<[^>]*>"), "")
+        return "Am analizat contextul disponibil despre \"$topic\":\n\n" +
+               "1. Referitor la întrebarea ta ($question), informațiile curente sugerează monitorizarea sursei pentru actualizări live.\n" +
+               "2. Momentan, serviciile cloud sunt ocupate, dar acest răspuns euristic îți confirmă că subiectul este în atenția noastră.\n" +
+               "3. Recomandăm verificarea secțiunii de detalii pentru contextul complet al știrii."
     }
 }

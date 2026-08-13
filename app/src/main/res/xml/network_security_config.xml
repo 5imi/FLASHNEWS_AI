@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Romanian legacy RSS sources -->
+        <domain includeSubdomains="true">tvr.ro</domain>
+        <domain includeSubdomains="true">stiri.tvr.ro</domain>
+        <domain includeSubdomains="true">agerpres.ro</domain>
+        <domain includeSubdomains="true">mediafax.ro</domain>
+        <domain includeSubdomains="true">hotnews.ro</domain>
+        <domain includeSubdomains="true">rfi.ro</domain>
+        <domain includeSubdomains="true">bursa.ro</domain>
+        <domain includeSubdomains="true">economica.net</domain>
+    </domain-config>
+</network-security-config>

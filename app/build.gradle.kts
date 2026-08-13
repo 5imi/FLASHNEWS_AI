@@ -21,6 +21,8 @@ android {
 
         buildConfigField("String", "GEMINI_API_KEY", "\"${project.findProperty("GEMINI_API_KEY") ?: ""}\"")
         buildConfigField("String", "GROK_API_KEY", "\"${project.findProperty("GROK_API_KEY") ?: "grok_placeholder"}\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"${project.findProperty("GROQ_API_KEY") ?: ""}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\"")
         buildConfigField("String", "NEWS_API_KEY", "\"${project.findProperty("NEWS_API_KEY") ?: ""}\"")
         buildConfigField("String", "NEWS_API_KEY_ALT", "\"${project.findProperty("NEWS_API_KEY_ALT") ?: ""}\"")
         buildConfigField("String", "NEWSDATA_IO_KEY", "\"${project.findProperty("NEWSDATA_IO_KEY") ?: ""}\"")
