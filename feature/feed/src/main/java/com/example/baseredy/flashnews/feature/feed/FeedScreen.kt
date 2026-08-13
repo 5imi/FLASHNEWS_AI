@@ -73,8 +73,25 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     ) {
         if (articles.itemCount > 0) {
             val pagerState = rememberPagerState(pageCount = { articles.itemCount })
+            // [OLD] - Motiv înlocuire: VerticalPager fără `key` cauza recompoziții redundante și resetarea stării imaginilor la scroll
+            /*
             VerticalPager(
                 state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                val article = articles[page]
+                if (article != null) {
+                    NewsCard(
+                        article = article,
+                        onBookmark = { viewModel.toggleBookmark(article) },
+                        onClick = { selectedArticleForDetail = article }
+                    )
+                }
+            }
+            */
+            VerticalPager(
+                state = pagerState,
+                key = { page -> articles.peek(page)?.url ?: page },
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 val article = articles[page]

@@ -19,13 +19,63 @@ class NewsSyncWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
+    // [OLD] - Motiv înlocuire: Worker-ul descărca 150+ surse globale la fiecare 2h și nu salva articolele în Room DB pentru pre-caching
+    /*
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // Fetch latest RSS items
             val rssItems = RssClient.fetchRssNews()
-            
-            // Check for keywords indicating major news
             val keywords = listOf("Urgență", "Lege", "Fiscal", "Guvern", "Codul Fiscal", "Impozit", "TVA")
+            val importantNews = rssItems.firstOrNull { item ->
+                keywords.any { keyword -> 
+                    item.title.contains(keyword, ignoreCase = true) 
+                }
+            }
+            if (importantNews != null) {
+                val db = NewsDatabase.getDatabase(appContext)
+                val existing = db.newsDao().getArticleByUrl(importantNews.link)
+                if (existing == null) {
+                    showNotification(importantNews.title, importantNews.sourceName, importantNews.link)
+                }
+            }
+            Result.success()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.retry()
+        }
+    }
+    */
+
+    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        try {
+            // Fetch priority RO & General RSS items for efficient background sync
+            val rssItems = RssClient.fetchRssNews(targetRegion = "RO", targetCategory = "General")
+            val db = NewsDatabase.getDatabase(appContext)
+
+            // Pre-cache new items in Room database
+            if (rssItems.isNotEmpty()) {
+                val entities = rssItems.map { item ->
+                    com.example.baseredy.flashnews.core.database.NewsArticleEntity(
+                        url = item.link,
+                        title = item.title,
+                        description = item.description,
+                        urlToImage = item.imageUrl,
+                        publishedAt = item.pubDate,
+                        sourceName = item.sourceName,
+                        category = item.category,
+                        region = item.region,
+                        aiSummary = "• ${item.description.take(150)}\n• Sursa: ${item.sourceName}",
+                        aiBias = "NEUTRU",
+                        aiLocalImpact = null,
+                        aiAnalyzedAt = 0L,
+                        isFavorite = false,
+                        isMultiPerspective = false
+                    )
+                }
+                db.newsDao().insertArticles(entities)
+            }
+            
+            // Check for keywords indicating major breaking news
+            val keywords = listOf("Urgență", "Lege", "Fiscal", "Guvern", "Codul Fiscal", "Impozit", "TVA", "Alertă")
             
             val importantNews = rssItems.firstOrNull { item ->
                 keywords.any { keyword -> 
@@ -34,12 +84,9 @@ class NewsSyncWorker(
             }
 
             if (importantNews != null) {
-                // If we found something important, show notification
-                // Check if it's already in DB to avoid duplicate notifications
-                val db = NewsDatabase.getDatabase(appContext)
                 val existing = db.newsDao().getArticleByUrl(importantNews.link)
-                
-                if (existing == null) {
+                // If it was fresh before this sync or newly notified
+                if (existing == null || existing.aiAnalyzedAt == 0L) {
                     showNotification(importantNews.title, importantNews.sourceName, importantNews.link)
                 }
             }

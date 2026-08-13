@@ -8,9 +8,13 @@ import com.example.baseredy.flashnews.core.network.RetrofitClient
 import com.example.baseredy.flashnews.core.network.AiClient
 import com.example.baseredy.flashnews.core.network.RssClient
 import com.example.baseredy.flashnews.core.network.RssItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 import java.time.Duration
 import java.time.format.DateTimeFormatter
@@ -26,6 +30,7 @@ class NewsRepository(
     private val newsDao: NewsDao,
     private val aiClient: AiClient? = null
 ) {
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun getArticles(region: String, category: String): Flow<PagingData<NewsArticle>> {
         val pagingSourceFactory = if (category == "Toate") {
@@ -89,7 +94,9 @@ class NewsRepository(
             // 4. Fetch from RSS
             val shouldFetchRss = region == "RO" || category == "General" || category == "Toate" || entities.size < 5
             if (shouldFetchRss) {
-                val rssItems = RssClient.fetchRssNews()
+                // [OLD] - Motiv înlocuire: Apelul fără parametri descărca 150+ feed-uri RSS indiferent de selecția utilizatorului
+                // val rssItems = RssClient.fetchRssNews()
+                val rssItems = RssClient.fetchRssNews(targetRegion = region, targetCategory = category)
 
                 val filteredRss = rssItems.filter { item ->
                     val regionMatch = item.region == region
@@ -119,6 +126,9 @@ class NewsRepository(
             val finalEntities = deduplicated.distinctBy { it.url }
             newsDao.insertArticles(finalEntities)
             
+            // Trigger asynchronous non-blocking AI enrichment in background for unanalyzed articles
+            triggerBackgroundAiAnalysis(finalEntities.filter { it.aiAnalyzedAt == null || it.aiAnalyzedAt == 0L })
+
             // Cleanup old articles (older than 14 days)
             val thresholdDate = ZonedDateTime.now().minusDays(14).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
             newsDao.deleteOldArticles(thresholdDate)
@@ -274,6 +284,43 @@ class NewsRepository(
         }
     }
 
+    // [OLD] - Motiv înlocuire: Apelurile AI sincrone din processAndAddEntity blocau inserarea articolelor în Room DB și încărcarea interfeței
+    /*
+    private suspend fun processAndAddEntity(
+        url: String,
+        title: String,
+        description: String?,
+        imageUrl: String?,
+        publishedAt: String,
+        sourceName: String?,
+        category: String,
+        region: String,
+        entities: MutableList<NewsArticleEntity>
+    ) {
+        val existing = newsDao.getArticleByUrl(url)
+        if (existing != null) {
+            entities.add(existing.copy(category = category))
+        } else {
+            val normalizedTitle = title.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim()
+            val duplicate = entities.find { it.title.lowercase().replace(Regex("[^a-z0-9 ]"), "").trim() == normalizedTitle }
+            if (duplicate != null) return
+            delay(100)
+            val summary = try { aiClient?.summarize(title, description ?: "", sourceName ?: "Unknown", category, region) } catch (e: Exception) { simulateAiSummary(description ?: title) }
+            val bias = try { aiClient?.analyzeBias(sourceName ?: "Unknown", title, category, region) } catch (e: Exception) { simulateBias(sourceName ?: "", category) }
+            val impact = if (summary != null && region != "GLOBAL" && !summary.contains("indisponibil", ignoreCase = true)) {
+                try { aiClient?.analyzeLocalImpact(title, description ?: "", region) } catch (e: Exception) { null }
+            } else null
+            entities.add(NewsArticleEntity(
+                url = url, title = title, description = description, urlToImage = imageUrl,
+                publishedAt = publishedAt, sourceName = sourceName, category = category,
+                aiSummary = summary, aiBias = bias, aiLocalImpact = impact,
+                aiAnalyzedAt = System.currentTimeMillis(), isFavorite = false,
+                region = region, isMultiPerspective = checkMultiPerspective(title)
+            ))
+        }
+    }
+    */
+
     private suspend fun processAndAddEntity(
         url: String,
         title: String,
@@ -295,27 +342,9 @@ class NewsRepository(
             
             if (duplicate != null) return
 
-            delay(100) // Respect AI rate limits
-            
-            val summary = try {
-                aiClient?.summarize(title, description ?: "", sourceName ?: "Unknown", category, region)
-            } catch (e: Exception) {
-                simulateAiSummary(description ?: title)
-            }
-
-            val bias = try {
-                aiClient?.analyzeBias(sourceName ?: "Unknown", title, category, region)
-            } catch (e: Exception) {
-                simulateBias(sourceName ?: "", category)
-            }
-            
-            val impact = if (summary != null && region != "GLOBAL" && !summary.contains("indisponibil", ignoreCase = true)) {
-                try {
-                    aiClient?.analyzeLocalImpact(title, description ?: "", region)
-                } catch (e: Exception) {
-                    null
-                }
-            } else null
+            // Instant heuristic summary for zero-latency initial UI display
+            val summary = simulateAiSummary(description ?: title)
+            val bias = simulateBias(sourceName ?: "", category)
 
             entities.add(NewsArticleEntity(
                 url = url,
@@ -327,12 +356,54 @@ class NewsRepository(
                 category = category,
                 aiSummary = summary,
                 aiBias = bias,
-                aiLocalImpact = impact,
-                aiAnalyzedAt = System.currentTimeMillis(),
+                aiLocalImpact = null,
+                aiAnalyzedAt = 0L, // Marked as un-enriched for background worker
                 isFavorite = false,
                 region = region,
                 isMultiPerspective = checkMultiPerspective(title)
             ))
+        }
+    }
+
+    private fun triggerBackgroundAiAnalysis(articlesToEnrich: List<NewsArticleEntity>) {
+        if (aiClient == null || articlesToEnrich.isEmpty()) return
+
+        repositoryScope.launch {
+            articlesToEnrich.take(10).forEach { article ->
+                try {
+                    delay(300) // Gentle rate-limit pacing
+                    val summary = aiClient.summarize(
+                        article.title,
+                        article.description ?: "",
+                        article.sourceName ?: "Unknown",
+                        article.category,
+                        article.region
+                    )
+                    val bias = aiClient.analyzeBias(
+                        article.sourceName ?: "Unknown",
+                        article.title,
+                        article.category,
+                        article.region
+                    )
+                    val impact = if (article.region != "GLOBAL" && !summary.contains("indisponibil", ignoreCase = true)) {
+                        try {
+                            aiClient.analyzeLocalImpact(article.title, article.description ?: "", article.region)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+
+                    newsDao.updateAiAnalysis(
+                        url = article.url,
+                        summary = summary,
+                        bias = bias,
+                        impact = impact,
+                        analyzedAt = System.currentTimeMillis()
+                    )
+                } catch (e: Exception) {
+                    // Gracefully skip failed AI background analysis
+                }
+            }
         }
     }
 

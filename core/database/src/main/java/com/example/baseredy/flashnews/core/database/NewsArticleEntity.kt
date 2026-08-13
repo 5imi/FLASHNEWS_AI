@@ -1,9 +1,20 @@
 package com.example.baseredy.flashnews.core.database
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "news_articles")
+// [OLD] - Motiv înlocuire: Lipsa indicilor compuși cauza scanare completă (Full Table Scan) la sortările după publishedAt și filtrarea pe regiune/categorie
+// @Entity(tableName = "news_articles")
+
+@Entity(
+    tableName = "news_articles",
+    indices = [
+        Index(value = ["region", "category", "publishedAt"]),
+        Index(value = ["region", "publishedAt"]),
+        Index(value = ["isFavorite", "publishedAt"])
+    ]
+)
 data class NewsArticleEntity(
     @PrimaryKey val url: String,
     val title: String,

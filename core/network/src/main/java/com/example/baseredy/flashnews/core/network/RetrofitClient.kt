@@ -13,9 +13,21 @@ object RetrofitClient {
         coerceInputValues = true
     }
 
+    // [OLD] - Motiv înlocuire: Level.BODY aloca string-uri uriașe în RAM pentru corpurile JSON mari și nu avea ConnectionPool configurat
+    /*
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
+        })
+        .build()
+    */
+
+    val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
         })
         .build()
 

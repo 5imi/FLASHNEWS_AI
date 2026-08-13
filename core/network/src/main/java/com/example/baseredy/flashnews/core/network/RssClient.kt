@@ -294,6 +294,8 @@ object RssClient {
 
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    // [OLD] - Motiv înlocuire: Optimizare viteză rețea și economie de date prin filtrare prealabilă a surselor RSS
+    /*
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS    = 15_000
     private const val MAX_ITEMS_PER_SOURCE = 10
@@ -301,6 +303,40 @@ object RssClient {
 
     suspend fun fetchRssNews(): List<RssItem> = coroutineScope {
         val deferredResults = sources.map { source ->
+            async(Dispatchers.IO) {
+                semaphore.withPermit {
+                    try {
+                        parseRss(source.url, source.name, source.region, source.category)
+                    } catch (e: Exception) {
+                        println("RSS_DEBUG: Error fetching ${source.name}: ${e.message}")
+                        emptyList<RssItem>()
+                    }
+                }
+            }
+        }
+        deferredResults.awaitAll().flatten().sortedByDescending { it.pubDate }
+    }
+    */
+
+    private const val CONNECT_TIMEOUT_MS = 6_000
+    private const val READ_TIMEOUT_MS    = 8_000
+    private const val MAX_ITEMS_PER_SOURCE = 10
+    private val semaphore = Semaphore(12) // Limit concurrency to 12 sources at a time
+
+    suspend fun fetchRssNews(targetRegion: String? = null, targetCategory: String? = null): List<RssItem> = coroutineScope {
+        val filteredSources = if (targetRegion == null && targetCategory == null) {
+            sources
+        } else {
+            sources.filter { source ->
+                val regionMatch = targetRegion == null || targetRegion == "ALL" || source.region == targetRegion
+                val categoryMatch = targetCategory == null || targetCategory == "Toate" || 
+                                    source.category.equals(targetCategory, ignoreCase = true) || 
+                                    source.category == "General" // Keep General for important context
+                regionMatch && categoryMatch
+            }.ifEmpty { sources }
+        }
+
+        val deferredResults = filteredSources.map { source ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
                     try {
