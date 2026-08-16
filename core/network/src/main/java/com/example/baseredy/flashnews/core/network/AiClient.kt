@@ -1,11 +1,27 @@
 package com.example.baseredy.flashnews.core.network
 
 import android.util.Log
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
 
 /**
  * Common interface for all AI providers.
  */
 interface AiClient {
+    /**
+     * Performs a dynamic, single-pass comprehensive analysis of a news story.
+     * The AI autonomously identifies the core takeaway, editorial bias with rationale,
+     * local impact (if relevant), and dynamically generates 2-3 specific inquiry angles & answers.
+     */
+    suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String = "",
+        category: String = "",
+        region: String = ""
+    ): DynamicNewsAnalysis
+
+    // [LEGACY] - Păstrate pentru compatibilitate cu apelurile existente
     suspend fun summarize(title: String, description: String, source: String = "", category: String = "", region: String = ""): String
     suspend fun analyzeBias(source: String, title: String, category: String = "", region: String = ""): String
     suspend fun analyzeLocalImpact(title: String, description: String, region: String = ""): String
@@ -79,8 +95,31 @@ class AiOrchestrator(
     private fun isValid(result: Any?): Boolean {
         return when (result) {
             is String -> result.isNotBlank() && !result.contains("indisponibil", ignoreCase = true)
+            is DynamicNewsAnalysis -> result.keyTakeaway.isNotBlank() && !result.keyTakeaway.contains("indisponibil", ignoreCase = true)
             else -> result != null
         }
+    }
+
+    override suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String,
+        category: String,
+        region: String
+    ): DynamicNewsAnalysis {
+        return runWithFailover(
+            primary = fastAgent,
+            block = { it.analyzeNewsDynamic(title, description, source, category, region) },
+            fallback = DynamicNewsAnalysis(
+                keyTakeaway = "• $title\n• Sursa: $source",
+                editorialBias = "NEUTRU",
+                biasRationale = "Sursă de știri standard.",
+                localImpact = if (region != "RO") "Urmărește contextul internațional pentru relevanță locală." else null,
+                dynamicQuestions = listOf(
+                    DynamicInsight("Ce trebuie să știi?", "Informațiile complete sunt disponibile în articolul original.")
+                )
+            )
+        )
     }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
@@ -124,3 +163,4 @@ class AiOrchestrator(
         )
     }
 }
+

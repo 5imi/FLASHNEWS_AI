@@ -3,6 +3,21 @@ package com.example.baseredy.flashnews.core.model
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class DynamicInsight(
+    val question: String,
+    val answer: String
+)
+
+@Serializable
+data class DynamicNewsAnalysis(
+    val keyTakeaway: String = "",
+    val editorialBias: String = "NEUTRU",
+    val biasRationale: String = "",
+    val localImpact: String? = null,
+    val dynamicQuestions: List<DynamicInsight> = emptyList()
+)
+
+@Serializable
 data class NewsArticle(
     val title: String,
     val description: String? = null,
@@ -14,6 +29,8 @@ data class NewsArticle(
     val aiBias: String? = null,
     val aiLocalImpact: String? = null,
     val aiAnalyzedAt: Long? = null,
+    val biasRationale: String = "",
+    val dynamicInsights: List<DynamicInsight> = emptyList(),
     val factCheckStatus: String = "PENDING",
     val factCheckReason: String = "",
     val isFavorite: Boolean = false,
@@ -46,7 +63,10 @@ data class SourceDto(
     val name: String? = null
 )
 
+// [LEGACY] - Reținut pentru compatibilitate inversă în straturile UI existente
+@Serializable
 data class AiInsight(
     val title: String,
     val content: String
 )
+

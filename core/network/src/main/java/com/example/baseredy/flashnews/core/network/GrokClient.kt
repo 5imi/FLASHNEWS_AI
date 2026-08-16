@@ -1,6 +1,8 @@
 package com.example.baseredy.flashnews.core.network
 
 import android.util.Log
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
 
 /**
  * Grok AI Client from xAI - specialized for bias detection and analytical tasks.
@@ -49,6 +51,29 @@ class GrokClient(private val apiKey: String) : AiClient {
             Log.e(TAG, "Grok AI failed: $operation", e)
             throw e
         }
+    }
+
+    override suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String,
+        category: String,
+        region: String
+    ): DynamicNewsAnalysis {
+        val bias = analyzeBias(source, title, category, region)
+        val impact = if (region != "RO") analyzeLocalImpact(title, description, region) else null
+        val summary = description.take(250).ifBlank { title.take(250) }.trim()
+
+        return DynamicNewsAnalysis(
+            keyTakeaway = "• $summary\n• Sursa: $source",
+            editorialBias = bias,
+            biasRationale = "Evaluare analitică a profilului editorial pentru $source.",
+            localImpact = impact,
+            dynamicQuestions = listOf(
+                DynamicInsight("Care este miza principală?", "Evenimentul prezintă un interes sporit pentru categoria $category."),
+                DynamicInsight("Ce perspective există?", "Urmărește evoluția reacțiilor oficiale din sursele de știri.")
+            )
+        )
     }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {

@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -26,7 +27,9 @@ dependencies {
     api(project(":core:database"))
     
     implementation(libs.androidx.core.ktx)
+    implementation(libs.kotlinx.serialization.json)
     implementation("androidx.room:room-runtime:2.7.2")
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.work.runtime.ktx)
 }
+

@@ -295,14 +295,6 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                             color = Color.White.copy(alpha = 0.6f)
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    FactCheckBadge(article.factCheckStatus)
-                    if (article.isMultiPerspective) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(color = Color(0xFFFF9800).copy(alpha = 0.2f), shape = RoundedCornerShape(4.dp)) {
-                            Text("PERSPECTIVE MULTIPLE", modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
-                        }
-                    }
                 }
                 IconButton(onClick = onBookmark) {
                     Icon(
@@ -382,8 +374,9 @@ fun ArticleDetailContent(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Personal Impact for Romania
-        article.aiLocalImpact?.let { impact ->
+        // Personal Impact for Romania (Shown when available and relevant)
+        val localImpact = article.aiLocalImpact
+        if (!localImpact.isNullOrBlank()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
@@ -395,7 +388,7 @@ fun ArticleDetailContent(
                         Text("IMPACT ASUPRA ROMÂNIEI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(impact, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
+                    Text(localImpact, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -412,7 +405,7 @@ fun ArticleDetailContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 val timeLabel = article.aiAnalyzedAt?.let { " (analizat acum ${formatTimestamp(it)})" } ?: ""
                 Text(
-                    "Rezumat generat și tradus automat de AI$timeLabel. Verifică sursa originală pentru context complet.",
+                    "Rezumat și analiză generate de AI News Analyst$timeLabel. Verifică sursa originală pentru context complet.",
                     fontSize = 12.sp,
                     color = Color.White.copy(alpha = 0.7f)
                 )
@@ -421,11 +414,11 @@ fun ArticleDetailContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // AI Insight Section
-        val biasColor = when (article.aiBias) {
+        // AI Editorial Bias Section
+        val biasColor = when (article.aiBias?.uppercase()) {
             "NEUTRU" -> Color(0xFF4CAF50)
             "DREAPTA" -> Color(0xFFF44336)
-            "STÂNGA" -> Color(0xFF2196F3)
+            "STÂNGA", "STANGA" -> Color(0xFF2196F3)
             "PROPAGANDĂ", "PROPAGANDA" -> Color(0xFFFFEB3B)
             else -> Color.White
         }
@@ -434,36 +427,23 @@ fun ArticleDetailContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("ANALIZĂ AI", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                    Text("ANALIZĂ EDITORIALĂ", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
-                Row {
-                    Text("Înclinație Editorială: ", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Înclinație: ", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Text(
                         text = article.aiBias ?: "NEUTRU", 
                         color = biasColor, 
                         fontSize = 14.sp, 
-                        fontWeight = if (article.aiBias == "PROPAGANDĂ" || article.aiBias == "PROPAGANDA") FontWeight.ExtraBold else FontWeight.Bold
+                        fontWeight = FontWeight.Bold
                     )
                 }
-                Text(article.factCheckReason, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
-
-
-        if (article.isMultiPerspective) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFF9800).copy(alpha = 0.05f)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.2f))) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CompareArrows, null, tint = Color(0xFFFF9800))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("ANALIZĂ COMPARATIVĂ", fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
+                if (article.biasRationale.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Acest subiect este intens dezbătut la nivel global. AI-ul analizează acum narațiunile din ${article.region} și alte regiuni pentru a-ți oferi o imagine de ansamblu echilibrată.",
-                        color = Color.White,
+                        text = article.biasRationale,
+                        color = Color.White.copy(alpha = 0.8f),
                         fontSize = 13.sp,
                         lineHeight = 18.sp
                     )
@@ -471,58 +451,66 @@ fun ArticleDetailContent(
             }
         }
 
-        // AI ASSISTANT SECTION
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("ASISTENTUL AI", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        // AI NEWS ANALYST DYNAMIC INSIGHTS
+        Spacer(modifier = Modifier.height(28.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("UNGHIURI CRITICE DE ANALIZĂ", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                AssistChip(
-                    onClick = { onAskQuestion("Explică simplu această știre în 2 propoziții.") },
-                    label = { Text("Explică simplu") },
-                    leadingIcon = { Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(18.dp)) }
-                )
-            }
-            item {
-                AssistChip(
-                    onClick = { onAskQuestion("Spune-mi de ce contează această știre pentru România.") },
-                    label = { Text("Impact local") },
-                    leadingIcon = { Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp)) }
-                )
-            }
-            item {
-                AssistChip(
-                    onClick = { onAskQuestion("Ce trebuie să verific înainte să cred această știre?") },
-                    label = { Text("Ce să verific") },
-                    leadingIcon = { Icon(Icons.Default.VerifiedUser, null, modifier = Modifier.size(18.dp)) }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
+        // Dynamic chips generated for this specific article
         if (aiInsights.isNotEmpty()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(aiInsights) { insight ->
+                    AssistChip(
+                        onClick = { onAskQuestion(insight.title) },
+                        label = { Text(insight.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = { Icon(Icons.Default.QuestionAnswer, null, modifier = Modifier.size(16.dp)) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
             aiInsights.forEach { insight ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.06f)),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
                         Text(insight.title, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(insight.content, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, lineHeight = 18.sp)
+                        Text(insight.content, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, lineHeight = 19.sp)
                     }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+        } else if (isChatLoading) {
+            Surface(
+                color = Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("AI News Analyst generează analiza dinamică...", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                }
+            }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         TextField(
             value = questionText,
             onValueChange = { questionText = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Ex: Cum ne afectează asta economia?", color = Color.Gray) },
+            placeholder = { Text("Întreabă AI despre acest subiect...", color = Color.Gray) },
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
                 focusedContainerColor = Color.White.copy(alpha = 0.1f),

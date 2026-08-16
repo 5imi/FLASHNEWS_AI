@@ -1,12 +1,15 @@
 package com.example.baseredy.flashnews.core.network
 
 import android.util.Log
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.BlockThreshold
 import com.google.ai.client.generativeai.type.HarmCategory
 import com.google.ai.client.generativeai.type.SafetySetting
 import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.Json
 import java.security.MessageDigest
 
 class GeminiClient(apiKey: String) : AiClient {
@@ -23,17 +26,53 @@ class GeminiClient(apiKey: String) : AiClient {
         modelName = "gemini-1.5-flash",
         apiKey = apiKey,
         safetySettings = safetySettings,
-        systemInstruction = content { text("Ești un jurnalist expert român. Oferi informații clare, obiective și rezumate structurate pentru un flux de știri rapid.") }
+        systemInstruction = content { text("Ești un analist media și jurnalist expert român. Analizezi obiectiv, identifici unghiurile critice și răspunzi strict în formatul cerut, în limba română.") }
     )
 
     private val cache = mutableMapOf<String, String>()
     private var lastApiCallTime = 0L
     private val minDelayBetweenCalls = 100L
 
+    private val jsonParser = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
+
     private fun cleanResponse(raw: String): String {
         return raw.replace(Regex("```[a-z]*\\n?"), "")
             .replace("```", "")
             .trim()
+    }
+
+    private fun parseDynamicJson(raw: String, title: String, source: String, region: String): DynamicNewsAnalysis {
+        return try {
+            val cleaned = raw.replace(Regex("^```json\\s*", RegexOption.MULTILINE), "")
+                .replace(Regex("^```\\s*", RegexOption.MULTILINE), "")
+                .replace("```", "")
+                .trim()
+            
+            val jsonStart = cleaned.indexOf('{')
+            val jsonEnd = cleaned.lastIndexOf('}')
+            val jsonString = if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+                cleaned.substring(jsonStart, jsonEnd + 1)
+            } else {
+                cleaned
+            }
+            
+            jsonParser.decodeFromString<DynamicNewsAnalysis>(jsonString)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to parse dynamic analysis JSON, using fallback: ${e.message}")
+            DynamicNewsAnalysis(
+                keyTakeaway = "• " + title.take(200),
+                editorialBias = "NEUTRU",
+                biasRationale = "Sursă de știri standard.",
+                localImpact = if (region != "RO") "Subiectul poate avea relevanță indirectă pentru România." else null,
+                dynamicQuestions = listOf(
+                    DynamicInsight("Ce trebuie să știi?", "Detalii suplimentare sunt disponibile în articolul original.")
+                )
+            )
+        }
     }
 
     private fun getCacheKey(operation: String, vararg inputs: String): String {
@@ -55,6 +94,58 @@ class GeminiClient(apiKey: String) : AiClient {
         
         Log.d(TAG, "Starting Gemini call: $operation")
         return block()
+    }
+
+    override suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String,
+        category: String,
+        region: String
+    ): DynamicNewsAnalysis {
+        val cacheKey = getCacheKey("dynamic_analysis", title, description)
+        cache[cacheKey]?.let { cachedJson ->
+            return parseDynamicJson(cachedJson, title, source, region)
+        }
+
+        val rawResult = rateLimitedCall("analyzeNewsDynamic") {
+            val truncDesc = description.take(2000)
+            val prompt = """
+                Ești un jurnalist senior de investigație și analist media.
+                Analizează în profunzime această știre și generează un raport structurat, fără șabloane prestabilite.
+                Formulează tu însuți 2-3 unghiuri sau întrebări specifice și relevante exclusiv pentru această știre și răspunde la ele.
+                
+                Știre:
+                - Titlu: $title
+                - Sursă: $source
+                - Categorie: $category
+                - Regiune: $region
+                - Conținut: $truncDesc
+                
+                Răspunde STRICT în următorul format JSON valid (fără alt text în afara JSON-ului):
+                {
+                  "keyTakeaway": "• 2-3 puncte scurte și clare cu esența știrii",
+                  "editorialBias": "NEUTRU / STÂNGA / DREAPTA / PROPAGANDĂ",
+                  "biasRationale": "O frază scurtă care justifică eticheta de bias",
+                  "localImpact": "1-2 fraze despre relevanța pentru România/cetățeanul român (sau null dacă e complet irelevant)",
+                  "dynamicQuestions": [
+                    {
+                      "question": "Întrebare specifică formulată de tine (max 8 cuvinte)",
+                      "answer": "Răspuns clar și concis (2-3 propoziții)"
+                    }
+                  ]
+                }
+                
+                IMPORTANT: Răspunde DOAR în limba ROMÂNĂ.
+            """.trimIndent()
+
+            val response = model.generateContent(content { text(prompt) })
+            val raw = response.text ?: throw Exception("Empty dynamic analysis response")
+            cache[cacheKey] = raw
+            raw
+        }
+
+        return parseDynamicJson(rawResult, title, source, region)
     }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
@@ -121,3 +212,4 @@ class GeminiClient(apiKey: String) : AiClient {
         }
     }
 }
+

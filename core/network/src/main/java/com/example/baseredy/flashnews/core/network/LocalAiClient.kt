@@ -1,9 +1,51 @@
 package com.example.baseredy.flashnews.core.network
 
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
+
 /**
  * Local AI client - provides heuristic responses in Romanian for offline or failover scenarios.
  */
 class LocalAiClient : AiClient {
+
+    override suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String,
+        category: String,
+        region: String
+    ): DynamicNewsAnalysis {
+        val summary = description.take(250).ifBlank { title.take(250) }.replace(Regex("<[^>]*>"), "").trim()
+        val bias = analyzeBias(source, title, category, region)
+        val impact = if (region != "RO") analyzeLocalImpact(title, description, region) else null
+        
+        val dynamicQuestions = when (category) {
+            "Tehnologie", "Auto" -> listOf(
+                DynamicInsight("Care este inovația principală?", "Subiectul aduce noutăți relevante în domeniul tehnologic și al pieței de profil."),
+                DynamicInsight("Ce impact are pentru consumatori?", "Utilizatorii ar putea beneficia de funcționalități noi sau schimbări în serviciile utilizate.")
+            )
+            "Business & Finanțe" -> listOf(
+                DynamicInsight("Cum sunt influențate piețele?", "Evoluțiile economice descrise pot genera efecte asupra costurilor și investițiilor."),
+                DynamicInsight("Ce trebuie urmărit în continuare?", "Deciziile autorităților financiare și reacțiile companiilor din sector.")
+            )
+            "Politică", "General" -> listOf(
+                DynamicInsight("Care este miza principală?", "Deciziile sau evenimentele menționate influențează direct agenda publică."),
+                DynamicInsight("Ce urmează?", "Părțile implicate își vor exprima pozițiile oficiale în perioada următoare.")
+            )
+            else -> listOf(
+                DynamicInsight("De ce este important?", "Informația reflectă o dezvoltare relevantă în categoria $category."),
+                DynamicInsight("Ce trebuie verificat?", "Urmărește sursele autorizate pentru confirmări și detalii complete.")
+            )
+        }
+
+        return DynamicNewsAnalysis(
+            keyTakeaway = "• $summary\n• Sursa: $source",
+            editorialBias = bias,
+            biasRationale = "Evaluare euristică pe baza profilului editorial al sursei.",
+            localImpact = impact,
+            dynamicQuestions = dynamicQuestions
+        )
+    }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String {
         val summary = description.take(200).ifBlank { title.take(200) }
@@ -50,3 +92,4 @@ class LocalAiClient : AiClient {
                "3. Recomandăm verificarea secțiunii de detalii pentru contextul complet al știrii."
     }
 }
+

@@ -1,6 +1,8 @@
 package com.example.baseredy.flashnews.core.network
 
 import android.util.Log
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -35,19 +37,95 @@ data class GroqChoice(
 
 class GroqClient(private val apiKey: String) : AiClient {
     private val client = OkHttpClient()
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json { 
+        ignoreUnknownKeys = true 
+        isLenient = true
+        coerceInputValues = true
+    }
     private val model = "llama-3.3-70b-versatile"
     
     private val cache = mutableMapOf<String, String>()
     private var lastApiCallTime = 0L
     private val minDelayBetweenCalls = 500L
 
-    private val systemPrompt = "Ești un jurnalist român expert în analiză politică și socială. Răspunzi precis, în română, fără text redundant."
+    private val systemPrompt = "Ești un analist media și jurnalist expert român. Răspunzi strict în format JSON valid, în limba română."
 
     private fun cleanResponse(raw: String): String {
         return raw.replace(Regex("```[a-z]*\\n?"), "")
             .replace("```", "")
             .trim()
+    }
+
+    private fun parseDynamicJson(raw: String, title: String, source: String, region: String): DynamicNewsAnalysis {
+        return try {
+            val cleaned = raw.replace(Regex("^```json\\s*", RegexOption.MULTILINE), "")
+                .replace(Regex("^```\\s*", RegexOption.MULTILINE), "")
+                .replace("```", "")
+                .trim()
+            
+            val jsonStart = cleaned.indexOf('{')
+            val jsonEnd = cleaned.lastIndexOf('}')
+            val jsonString = if (jsonStart != -1 && jsonEnd != -1 && jsonEnd > jsonStart) {
+                cleaned.substring(jsonStart, jsonEnd + 1)
+            } else {
+                cleaned
+            }
+            
+            json.decodeFromString<DynamicNewsAnalysis>(jsonString)
+        } catch (e: Exception) {
+            Log.w("GroqClient", "Failed to parse JSON, returning fallback: ${e.message}")
+            DynamicNewsAnalysis(
+                keyTakeaway = "• " + title.take(200),
+                editorialBias = "NEUTRU",
+                biasRationale = "Sursă de știri standard.",
+                localImpact = if (region != "RO") "Subiect internațional de interes pentru România." else null,
+                dynamicQuestions = listOf(
+                    DynamicInsight("Ce trebuie să știi?", "Detalii suplimentare sunt disponibile în articolul original.")
+                )
+            )
+        }
+    }
+
+    override suspend fun analyzeNewsDynamic(
+        title: String,
+        description: String,
+        source: String,
+        category: String,
+        region: String
+    ): DynamicNewsAnalysis = withContext(Dispatchers.IO) {
+        val cacheKey = "dyn_groq:${title.hashCode()}"
+        cache[cacheKey]?.let { return@withContext parseDynamicJson(it, title, source, region) }
+
+        val prompt = """
+            Ești un jurnalist senior de investigație și analist media.
+            Analizează această știre și formulează tu însuți 2-3 unghiuri sau întrebări specifice și relevante pentru această știre și răspunde la ele.
+            
+            Știre:
+            - Titlu: $title
+            - Sursă: $source
+            - Categorie: $category
+            - Regiune: $region
+            - Conținut: ${description.take(2000)}
+            
+            Răspunde STRICT în următorul format JSON valid:
+            {
+              "keyTakeaway": "• 2-3 puncte scurte și clare cu esența știrii",
+              "editorialBias": "NEUTRU / STÂNGA / DREAPTA / PROPAGANDĂ",
+              "biasRationale": "O frază scurtă care justifică eticheta de bias",
+              "localImpact": "1-2 fraze despre relevanța pentru România (sau null)",
+              "dynamicQuestions": [
+                {
+                  "question": "Întrebare specifică formulată de tine (max 8 cuvinte)",
+                  "answer": "Răspuns clar și concis (2-3 propoziții)"
+                }
+              ]
+            }
+            Răspunde DOAR în limba ROMÂNĂ.
+        """.trimIndent()
+
+        val raw = callAi(prompt) ?: return@withContext parseDynamicJson("", title, source, region)
+        cache[cacheKey] = raw
+        parseDynamicJson(raw, title, source, region)
     }
 
     override suspend fun summarize(title: String, description: String, source: String, category: String, region: String): String = withContext(Dispatchers.IO) {
@@ -121,3 +199,4 @@ class GroqClient(private val apiKey: String) : AiClient {
         }
     }
 }
+

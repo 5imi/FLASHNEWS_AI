@@ -3,6 +3,8 @@ package com.example.baseredy.flashnews.core.data
 import com.example.baseredy.flashnews.core.database.NewsDao
 import com.example.baseredy.flashnews.core.database.NewsArticleEntity
 import com.example.baseredy.flashnews.core.model.AiInsight
+import com.example.baseredy.flashnews.core.model.DynamicInsight
+import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
 import com.example.baseredy.flashnews.core.model.NewsArticle
 import com.example.baseredy.flashnews.core.network.RetrofitClient
 import com.example.baseredy.flashnews.core.network.AiClient
@@ -15,6 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import java.time.ZonedDateTime
 import java.time.Duration
 import java.time.format.DateTimeFormatter
@@ -31,6 +34,11 @@ class NewsRepository(
     private val aiClient: AiClient? = null
 ) {
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val jsonSerializer = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        coerceInputValues = true
+    }
 
     fun getArticles(region: String, category: String): Flow<PagingData<NewsArticle>> {
         val pagingSourceFactory = if (category == "Toate") {
@@ -372,32 +380,31 @@ class NewsRepository(
             articlesToEnrich.take(10).forEach { article ->
                 try {
                     delay(300) // Gentle rate-limit pacing
-                    val summary = aiClient.summarize(
-                        article.title,
-                        article.description ?: "",
-                        article.sourceName ?: "Unknown",
-                        article.category,
-                        article.region
-                    )
-                    val bias = aiClient.analyzeBias(
-                        article.sourceName ?: "Unknown",
-                        article.title,
-                        article.category,
-                        article.region
-                    )
+                    // [OLD] - Motiv înlocuire: Apelurile separate (summarize, bias, impact) cauzau fragmentare, latență și rate-limiting
+                    /*
+                    val summary = aiClient.summarize(article.title, article.description ?: "", article.sourceName ?: "Unknown", article.category, article.region)
+                    val bias = aiClient.analyzeBias(article.sourceName ?: "Unknown", article.title, article.category, article.region)
                     val impact = if (article.region != "GLOBAL" && !summary.contains("indisponibil", ignoreCase = true)) {
-                        try {
-                            aiClient.analyzeLocalImpact(article.title, article.description ?: "", article.region)
-                        } catch (e: Exception) {
-                            null
-                        }
+                        try { aiClient.analyzeLocalImpact(article.title, article.description ?: "", article.region) } catch (e: Exception) { null }
                     } else null
+                    newsDao.updateAiAnalysis(article.url, summary, bias, impact, System.currentTimeMillis())
+                    */
+
+                    val dynamicAnalysis = aiClient.analyzeNewsDynamic(
+                        title = article.title,
+                        description = article.description ?: "",
+                        source = article.sourceName ?: "Unknown",
+                        category = article.category,
+                        region = article.region
+                    )
+
+                    val serializedJson = jsonSerializer.encodeToString(DynamicNewsAnalysis.serializer(), dynamicAnalysis)
 
                     newsDao.updateAiAnalysis(
                         url = article.url,
-                        summary = summary,
-                        bias = bias,
-                        impact = impact,
+                        summary = serializedJson,
+                        bias = dynamicAnalysis.editorialBias,
+                        impact = dynamicAnalysis.localImpact,
                         analyzedAt = System.currentTimeMillis()
                     )
                 } catch (e: Exception) {
@@ -429,23 +436,43 @@ class NewsRepository(
         }
     }
 
-    private fun NewsArticleEntity.toDomain() = NewsArticle(
-        title = title,
-        description = description,
-        url = url,
-        urlToImage = urlToImage,
-        publishedAt = publishedAt,
-        sourceName = sourceName,
-        aiSummary = aiSummary,
-        aiBias = aiBias,
-        aiLocalImpact = aiLocalImpact,
-        aiAnalyzedAt = aiAnalyzedAt,
-        isFavorite = isFavorite,
-        relativeTime = formatRelativeTime(publishedAt),
-        sourceLogoUrl = getFaviconUrl(url),
-        region = region,
-        isMultiPerspective = isMultiPerspective
-    )
+    private fun NewsArticleEntity.toDomain(): NewsArticle {
+        val rawSummary = aiSummary
+        var displaySummary = rawSummary
+        var rationale = ""
+        var dynamicList = emptyList<DynamicInsight>()
+
+        if (rawSummary?.startsWith("{") == true) {
+            try {
+                val parsed = jsonSerializer.decodeFromString(DynamicNewsAnalysis.serializer(), rawSummary)
+                displaySummary = parsed.keyTakeaway.ifBlank { displaySummary }
+                rationale = parsed.biasRationale
+                dynamicList = parsed.dynamicQuestions
+            } catch (e: Exception) {
+                // Keep raw aiSummary on parse exception
+            }
+        }
+
+        return NewsArticle(
+            title = title,
+            description = description,
+            url = url,
+            urlToImage = urlToImage,
+            publishedAt = publishedAt,
+            sourceName = sourceName,
+            aiSummary = displaySummary,
+            aiBias = aiBias,
+            aiLocalImpact = aiLocalImpact,
+            aiAnalyzedAt = aiAnalyzedAt,
+            biasRationale = rationale,
+            dynamicInsights = dynamicList,
+            isFavorite = isFavorite,
+            relativeTime = formatRelativeTime(publishedAt),
+            sourceLogoUrl = getFaviconUrl(url),
+            region = region,
+            isMultiPerspective = checkMultiPerspective(title)
+        )
+    }
 
     suspend fun askAi(article: NewsArticle, question: String): String {
         val context = "Titlu: ${article.title}. Descriere: ${article.description?.take(1500) ?: ""}"
@@ -454,71 +481,70 @@ class NewsRepository(
         } catch (e: Exception) {
             "Eroare AI - verifică conexiunea."
         }
-        
-        // Update DB with this question as a temporary summary or just log it
-        // For now we just return it, but ensuring context is 1500 chars was the key.
         return response
     }
 
-    suspend fun getAiInsights(article: NewsArticle): List<AiInsight> {
-        // Reuse insights if they exist in DB and are fresh (less than 24h old)
+    suspend fun getDynamicAnalysis(article: NewsArticle): DynamicNewsAnalysis {
         val existing = newsDao.getArticleByUrl(article.url)
         val aiSummary = existing?.aiSummary
         val aiAnalyzedAt = existing?.aiAnalyzedAt
         
-        if (aiSummary != null && aiAnalyzedAt != null) {
+        // Return fresh cached analysis if available (< 24h)
+        if (!aiSummary.isNullOrBlank() && aiAnalyzedAt != null) {
             val age = System.currentTimeMillis() - aiAnalyzedAt
-            if (age < 24 * 3600 * 1000 && aiSummary.contains("===")) {
-                val sections = aiSummary.split("===").map { it.trim() }
-                if (sections.size >= 3) {
-                    val titles = listOf("Explică simplu", "Impact local", "Ce trebuie să verifici")
-                    return titles.mapIndexed { index, title ->
-                        AiInsight(title = title, content = sections[index])
-                    }
+            if (age < 24 * 3600 * 1000 && aiSummary.startsWith("{")) {
+                try {
+                    return jsonSerializer.decodeFromString(DynamicNewsAnalysis.serializer(), aiSummary)
+                } catch (e: Exception) {
+                    // Fall through to re-generate
                 }
             }
         }
 
-        val combinedPrompt = """
-            Ești un analist media senior. Analizează acest articol și oferă 3 secțiuni separate EXACT prin secvența '===' între ele.
-            
-            Titlu: ${article.title}
-            Sursă: ${article.sourceName}
-            Context: ${article.description?.take(1500) ?: ""}
-            
-            Secțiunea 1: Explică simplu (Ce s-a întâmplat defapt? 2-3 propoziții clare)
-            ===
-            Secțiunea 2: Impact pentru România (Cum ne afectează direct sau indirect? 1-2 propoziții)
-            ===
-            Secțiunea 3: Fact-check (2-3 puncte critice de verificat pentru a evita dezinformarea)
-            
-            Răspunde DOAR în limba ROMÂNĂ. Nu adăuga introduceri sau concluzii.
-        """.trimIndent()
-
         return try {
-            val fullResponse = aiClient?.askQuestion(article.title, combinedPrompt) ?: ""
-            val sections = fullResponse.split("===").map { it.trim() }
-            
-            val titles = listOf("Explică simplu", "Impact local", "Ce trebuie să verifici")
-            val insights = titles.mapIndexed { index, title ->
-                AiInsight(
-                    title = title,
-                    content = if (index < sections.size) sections[index] else "Informație indisponibilă."
+            val analysis = aiClient?.analyzeNewsDynamic(
+                title = article.title,
+                description = article.description ?: "",
+                source = article.sourceName ?: "Unknown",
+                category = article.region,
+                region = article.region
+            ) ?: DynamicNewsAnalysis(
+                keyTakeaway = "• ${article.title}",
+                editorialBias = article.aiBias ?: "NEUTRU",
+                biasRationale = "Sursă de știri standard.",
+                localImpact = article.aiLocalImpact,
+                dynamicQuestions = listOf(
+                    DynamicInsight("Ce trebuie să știi?", article.description ?: article.title)
                 )
-            }
-            
-            // Persist the structured analysis for future use
-            if (sections.size >= 3) {
-                newsDao.updateAiAnalysis(article.url, fullResponse, article.aiBias, article.aiLocalImpact, System.currentTimeMillis())
-            }
-            
-            insights
-        } catch (e: Exception) {
-            listOf(
-                AiInsight(title = "Explică simplu", content = article.title),
-                AiInsight(title = "Impact local", content = "Verifică sursa originală pentru detalii specifice."),
-                AiInsight(title = "Ce trebuie să verifici", content = "Compară informația cu alte publicații de încredere.")
             )
+
+            val serializedJson = jsonSerializer.encodeToString(DynamicNewsAnalysis.serializer(), analysis)
+            newsDao.updateAiAnalysis(
+                url = article.url,
+                summary = serializedJson,
+                bias = analysis.editorialBias,
+                impact = analysis.localImpact,
+                analyzedAt = System.currentTimeMillis()
+            )
+
+            analysis
+        } catch (e: Exception) {
+            DynamicNewsAnalysis(
+                keyTakeaway = "• ${article.title}",
+                editorialBias = article.aiBias ?: "NEUTRU",
+                biasRationale = "Sursă de știri standard.",
+                localImpact = article.aiLocalImpact,
+                dynamicQuestions = listOf(
+                    DynamicInsight("Ce trebuie să știi?", article.description ?: article.title)
+                )
+            )
+        }
+    }
+
+    suspend fun getAiInsights(article: NewsArticle): List<AiInsight> {
+        val analysis = getDynamicAnalysis(article)
+        return analysis.dynamicQuestions.map {
+            AiInsight(title = it.question, content = it.answer)
         }
     }
 

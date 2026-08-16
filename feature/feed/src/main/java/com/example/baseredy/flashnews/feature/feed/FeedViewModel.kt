@@ -98,6 +98,9 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val _aiInsights = MutableStateFlow<List<AiInsight>>(emptyList())
     val aiInsights: StateFlow<List<AiInsight>> = _aiInsights
 
+    private val _dynamicAnalysis = MutableStateFlow<com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis?>(null)
+    val dynamicAnalysis: StateFlow<com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis?> = _dynamicAnalysis
+
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading
 
@@ -133,14 +136,30 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadAiInsights(article: NewsArticle) {
         viewModelScope.launch {
-            // Check cache first
+            // Use pre-loaded dynamicInsights from domain model if available
+            if (article.dynamicInsights.isNotEmpty()) {
+                val cached = com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis(
+                    keyTakeaway = article.aiSummary ?: "",
+                    editorialBias = article.aiBias ?: "NEUTRU",
+                    biasRationale = article.biasRationale,
+                    localImpact = article.aiLocalImpact,
+                    dynamicQuestions = article.dynamicInsights
+                )
+                _dynamicAnalysis.value = cached
+                _aiInsights.value = article.dynamicInsights.map { AiInsight(it.question, it.answer) }
+                return@launch
+            }
+
+            // Check in-memory cache
             insightsCache[article.url]?.let {
                 _aiInsights.value = it
                 return@launch
             }
 
             _isChatLoading.value = true
-            val insights = repository.getAiInsights(article)
+            val analysis = repository.getDynamicAnalysis(article)
+            _dynamicAnalysis.value = analysis
+            val insights = analysis.dynamicQuestions.map { AiInsight(it.question, it.answer) }
             insightsCache[article.url] = insights
             _aiInsights.value = insights
             _isChatLoading.value = false
@@ -150,6 +169,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun clearChat() {
         _chatResponse.value = null
         _aiInsights.value = emptyList()
+        _dynamicAnalysis.value = null
     }
 
     fun refreshNews() {
