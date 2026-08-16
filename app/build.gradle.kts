@@ -13,8 +13,10 @@ android {
         applicationId = "com.example.baseredy.flashnews"
         minSdk = 31
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.2.6"
+        // [OLD] versionCode = 5
+        // [OLD] versionName = "1.2.6"
+        versionCode = 6
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
