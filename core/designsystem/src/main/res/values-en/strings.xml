@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">FlashNews AI</string>
+    <string name="news_feed">News Feed</string>
+    <string name="saved_news">Saved News</string>
+    <string name="search_news">Search news</string>
+    
+    <!-- Hub Regions -->
+    <string name="region_romania">🇷🇴 ROMANIA</string>
+    <string name="region_international">🌍 GLOBAL</string>
+
+    <!-- Categories -->
+    <string name="category_general">General</string>
+    <string name="category_technology">Technology</string>
+    <string name="category_business">Business</string>
+    <string name="category_science">Science</string>
+    <string name="category_sports">Sports</string>
+    <string name="category_health">Health</string>
+    <string name="category_entertainment">Entertainment</string>
+
+    <!-- AI Features -->
+    <string name="ai_digest">AI DIGEST</string>
+    <string name="ai_editorial_analysis">EDITORIAL ANALYSIS</string>
+    <string name="ai_inclination">Bias &amp; Tone:</string>
+    <string name="ai_critical_angles">CRITICAL ANALYSIS ANGLES</string>
+    <string name="ai_ask_placeholder">Ask AI about this topic...</string>
+    <string name="ai_analyzing">AI News Analyst is generating dynamic insights...</string>
+    <string name="ai_local_impact">Local Impact</string>
+    <string name="ai_geopolitical">Geopolitical Angle</string>
+
+    <!-- Actions & States -->
+    <string name="read_full_article">Read Full Article</string>
+    <string name="bookmark_save">Save to favorites</string>
+    <string name="bookmark_remove">Remove from favorites</string>
+    <string name="empty_feed_title">No news found</string>
+    <string name="empty_feed_desc">Could not find news. Check your connection or change filters.</string>
+    <string name="empty_saved_title">No saved news</string>
+    <string name="empty_saved_desc">Bookmark news from the feed to see them here.</string>
+    <string name="offline_banner">You are offline. Showing cached local data.</string>
+</resources>

@@ -16,8 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -220,7 +221,7 @@ fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: S
                 onClick = onSearchClick,
                 modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
             ) {
-                Icon(Icons.Default.Search, null, tint = Color.White)
+                Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White)
             }
 
             LazyRow(modifier = Modifier.weight(1f).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -251,7 +252,7 @@ fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: S
             ) {
                 Icon(
                     imageVector = if (showOnlyFavorites) Icons.Default.Newspaper else Icons.Default.Bookmarks,
-                    contentDescription = null,
+                    contentDescription = if (showOnlyFavorites) "Comută la fluxul principal de știri" else "Comută la știrile salvate la favorite",
                     tint = if (showOnlyFavorites) MaterialTheme.colorScheme.primary else Color.White
                 )
             }
@@ -261,10 +262,10 @@ fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: S
 
 @Composable
 fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize().clickable { onClick() }) {
+    Box(modifier = Modifier.fillMaxSize().clickable(onClickLabel = "Deschide analiza detaliată a știrii") { onClick() }) {
         AsyncImage(
             model = article.urlToImage,
-            contentDescription = null,
+            contentDescription = "Imagine ilustrativă pentru știrea: ${article.title}",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
@@ -317,10 +318,13 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                         }
                     }
                 }
-                IconButton(onClick = onBookmark) {
+                IconButton(
+                    onClick = onBookmark,
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = if (article.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = null,
+                        contentDescription = if (article.isFavorite) "Elimină știrea din favorite" else "Salvează știrea la favorite",
                         tint = if (article.isFavorite) MaterialTheme.colorScheme.primary else Color.White,
                         modifier = Modifier.size(32.dp)
                     )
@@ -335,7 +339,7 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
             Surface(color = Color.White.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Sinteză inteligentă AI", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("AI DIGEST", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, letterSpacing = 1.5.sp)
                     }
@@ -540,10 +544,11 @@ fun ArticleDetailContent(
                             questionText = ""
                         }
                     },
-                    enabled = !isChatLoading
+                    enabled = !isChatLoading,
+                    modifier = Modifier.size(48.dp)
                 ) {
                     if (isChatLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Send, null, tint = MaterialTheme.colorScheme.primary)
+                    else Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Trimite întrebarea către AI News Analyst", tint = MaterialTheme.colorScheme.primary)
                 }
             },
             shape = RoundedCornerShape(12.dp)
@@ -573,10 +578,10 @@ fun ArticleDetailContent(
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
                 context.startActivity(intent)
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null)
+            Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Deschide sursa originală în browser extern")
             Spacer(modifier = Modifier.width(8.dp))
             Text("Citește Articolul Complet")
         }

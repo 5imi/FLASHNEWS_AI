@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App & General -->
+    <string name="app_name">FlashNews AI</string>
+    <string name="news_feed">Flux Știri</string>
+    <string name="saved_news">Știri Salvate</string>
+    <string name="search_news">Caută știri</string>
+    
+    <!-- Hub Regions -->
+    <string name="region_romania">🇷🇴 ROMÂNIA</string>
+    <string name="region_international">🌍 INTERNAȚIONAL</string>
+
+    <!-- Categories -->
+    <string name="category_general">General</string>
+    <string name="category_technology">Tehnologie</string>
+    <string name="category_business">Afaceri</string>
+    <string name="category_science">Știință</string>
+    <string name="category_sports">Sport</string>
+    <string name="category_health">Sănătate</string>
+    <string name="category_entertainment">Divertisment</string>
+
+    <!-- AI Features -->
+    <string name="ai_digest">AI DIGEST</string>
+    <string name="ai_editorial_analysis">ANALIZĂ EDITORIALĂ</string>
+    <string name="ai_inclination">Înclinație:</string>
+    <string name="ai_critical_angles">UNGHIURI CRITICE DE ANALIZĂ</string>
+    <string name="ai_ask_placeholder">Întreabă AI despre acest subiect...</string>
+    <string name="ai_analyzing">AI News Analyst generează analiza dinamică...</string>
+    <string name="ai_local_impact">Impact Local</string>
+    <string name="ai_geopolitical">Perspectivă Geopolitică</string>
+
+    <!-- Actions & States -->
+    <string name="read_full_article">Citește Articolul Complet</string>
+    <string name="bookmark_save">Salvează la favorite</string>
+    <string name="bookmark_remove">Elimină din favorite</string>
+    <string name="empty_feed_title">Nicio știre găsită</string>
+    <string name="empty_feed_desc">Nu am putut găsi știri. Verifică conexiunea sau schimbă filtrele.</string>
+    <string name="empty_saved_title">Nicio știre salvată</string>
+    <string name="empty_saved_desc">Începe să salvezi știri din flux pentru a le vedea aici.</string>
+    <string name="offline_banner">Ești offline. Se afișează datele salvate local.</string>
+</resources>
