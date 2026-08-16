@@ -71,7 +71,7 @@ class NewsSyncWorker(
                         isMultiPerspective = false
                     )
                 }
-                db.newsDao().insertArticles(entities)
+                db.newsDao().insertArticlesIfAbsent(entities)
             }
             
             // Check for keywords indicating major breaking news

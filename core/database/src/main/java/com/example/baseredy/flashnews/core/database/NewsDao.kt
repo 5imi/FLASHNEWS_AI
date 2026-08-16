@@ -16,6 +16,9 @@ interface NewsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertArticles(articles: List<NewsArticleEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertArticlesIfAbsent(articles: List<NewsArticleEntity>)
+
     @Query("SELECT * FROM news_articles WHERE isFavorite = 1 ORDER BY publishedAt DESC")
     fun getFavoriteArticles(): PagingSource<Int, NewsArticleEntity>
 

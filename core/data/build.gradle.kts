@@ -19,6 +19,9 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -31,5 +34,8 @@ dependencies {
     implementation("androidx.room:room-runtime:2.7.2")
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.work.runtime.ktx)
+
+    testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
 

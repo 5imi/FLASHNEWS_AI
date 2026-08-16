@@ -37,6 +37,7 @@ data class NewsArticle(
     val relativeTime: String = "",
     val sourceLogoUrl: String = "",
     val region: String = "GLOBAL",
+    val category: String = "General",
     val isMultiPerspective: Boolean = false
 )
 

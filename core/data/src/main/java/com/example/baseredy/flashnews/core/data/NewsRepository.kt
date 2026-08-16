@@ -470,6 +470,7 @@ class NewsRepository(
             relativeTime = formatRelativeTime(publishedAt),
             sourceLogoUrl = getFaviconUrl(url),
             region = region,
+            category = category,
             isMultiPerspective = checkMultiPerspective(title)
         )
     }
@@ -506,7 +507,7 @@ class NewsRepository(
                 title = article.title,
                 description = article.description ?: "",
                 source = article.sourceName ?: "Unknown",
-                category = article.region,
+                category = article.category,
                 region = article.region
             ) ?: DynamicNewsAnalysis(
                 keyTakeaway = "• ${article.title}",

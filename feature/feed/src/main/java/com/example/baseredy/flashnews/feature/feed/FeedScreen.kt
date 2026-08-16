@@ -275,7 +275,7 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
 
         Column(modifier = Modifier.align(Alignment.BottomStart).padding(24.dp).padding(bottom = 40.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
                     AsyncImage(
                         model = article.sourceLogoUrl,
                         contentDescription = null,
@@ -286,7 +286,9 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                         article.sourceName ?: "NEWS", 
                         fontSize = 12.sp, 
                         fontWeight = FontWeight.Bold, 
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (article.relativeTime.isNotEmpty()) {
                         Text(
@@ -294,6 +296,25 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                             fontSize = 12.sp, 
                             color = Color.White.copy(alpha = 0.6f)
                         )
+                    }
+                    val bias = article.aiBias
+                    if (!bias.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val badgeColor = getBiasBadgeColor(bias)
+                        Surface(
+                            color = badgeColor.copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, badgeColor.copy(alpha = 0.6f))
+                        ) {
+                            Text(
+                                text = bias,
+                                color = badgeColor,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
                 IconButton(onClick = onBookmark) {
@@ -415,13 +436,7 @@ fun ArticleDetailContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         // AI Editorial Bias Section
-        val biasColor = when (article.aiBias?.uppercase()) {
-            "NEUTRU" -> Color(0xFF4CAF50)
-            "DREAPTA" -> Color(0xFFF44336)
-            "STÂNGA", "STANGA" -> Color(0xFF2196F3)
-            "PROPAGANDĂ", "PROPAGANDA" -> Color(0xFFFFEB3B)
-            else -> Color.White
-        }
+        val biasColor = getBiasBadgeColor(article.aiBias)
         Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -578,18 +593,41 @@ private fun formatTimestamp(timestamp: Long): String {
     }
 }
 
-@Composable
-fun FactCheckBadge(status: String) {
-    val (color, text) = when (status) {
-        "VERIFIED" -> Color(0xFF4CAF50) to "VERIFICAT"
-        "UNVERIFIED" -> Color(0xFFF44336) to "NEVERIFICAT"
-        else -> Color(0xFFFFD60A) to "VERIFICARE"
+private fun getBiasBadgeColor(bias: String?): Color {
+    val normalized = bias?.uppercase() ?: return Color(0xFF78909C)
+    return when {
+        normalized.contains("SENZAȚIONALIST") || normalized.contains("SENZATIONALIST") || normalized.contains("TABLOID") -> Color(0xFFFB8C00)
+        normalized.contains("NEUTRU") || normalized.contains("FACTUAL") || normalized.contains("INDEPENDENT") -> Color(0xFF4CAF50)
+        normalized.contains("DREAPTA") -> Color(0xFF1E88E5)
+        normalized.contains("STÂNGA") || normalized.contains("STANGA") || normalized.contains("SOCIAL") -> Color(0xFF8E24AA)
+        normalized.contains("PROPAGANDĂ") || normalized.contains("PROPAGANDA") || normalized.contains("EXTREMA") -> Color(0xFFE53935)
+        normalized.contains("PARTIZAN") -> Color(0xFFFF7043)
+        else -> Color(0xFF78909C)
     }
-    Surface(color = color.copy(alpha = 0.15f), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.5f))) {
-        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(color))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color)
-        }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+fun NewsCardPreview() {
+    MaterialTheme {
+        NewsCard(
+            article = NewsArticle(
+                title = "Comisia Europeană aprobă tranziția energetică pentru România",
+                description = "Planul de investiții de 2 miliarde de euro a primit acordul oficial la Bruxelles.",
+                url = "https://example.com/news/1",
+                urlToImage = null,
+                publishedAt = "2026-08-16T12:00:00Z",
+                sourceName = "Digi24",
+                aiSummary = "• Investiție de 2 miliarde de euro pentru rețele electrice.\n• Tranziție accelerată către surse regenerabile.",
+                aiBias = "NEUTRU",
+                aiLocalImpact = "Impact direct asupra tarifelor energetice locale.",
+                biasRationale = "Raportare tehnică factuală.",
+                relativeTime = "acum 15m",
+                region = "RO",
+                category = "Economie"
+            ),
+            onBookmark = {},
+            onClick = {}
+        )
     }
 }
