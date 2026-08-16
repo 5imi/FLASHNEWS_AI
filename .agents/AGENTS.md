@@ -171,3 +171,11 @@ If any rule conflicts with an explicit user instruction, always follow the user'
 * Create periodic backups/saves of the project in key moments (before major backend/dashboard changes and after verified milestones). **In this project, backups will be performed using Git commits with descriptive messages.**
 * Collaboration workflow: Guide the user step-by-step with clear ideas and precise instructions, implement code changes when instructed, and verify every modification rigorously.
 
+---
+
+## 15. Automatic APK Delivery to `releases/`
+
+* Whenever an APK build is generated (`assembleDebug`, `assembleRelease`), the resulting `.apk` file **MUST ALWAYS be placed in the `releases/` folder**.
+* Name the APK with its version (e.g., `releases/FlashNews_AI_v<version>.apk`).
+* For version releases, create/update a dedicated release folder (e.g., `releases/v<version>-<feature>/`) with the APK and its corresponding release notes.
+
