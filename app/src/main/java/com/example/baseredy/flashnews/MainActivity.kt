@@ -58,8 +58,7 @@ class MainActivity : ComponentActivity() {
                 
                 LaunchedEffect(intent) {
                     intent?.getStringExtra("article_url")?.let { url ->
-                        // Navigate to detail if possible, or search for it
-                        // For now, we can at least ensure we are on feed
+                        feedViewModel.openArticleByUrl(url)
                         navController.navigate("feed")
                     }
                 }
@@ -90,7 +89,10 @@ class MainActivity : ComponentActivity() {
                         SearchScreen(
                             viewModel = searchViewModel, 
                             onBack = { navController.popBackStack() },
-                            onArticleClick = { /* We could open detail here too */ }
+                            onArticleClick = { article ->
+                                feedViewModel.selectArticleForDetail(article)
+                                navController.popBackStack()
+                            }
                         )
                     }
                 }

@@ -174,42 +174,53 @@ class NewsRepository(
     }
 
     suspend fun searchNews(apiKey: String, query: String): List<NewsArticle> {
-        return try {
-            val response = RetrofitClient.newsApi.searchNews(apiKey = apiKey, query = query)
-            response.articles.map { dto ->
-                val existing = newsDao.getArticleByUrl(dto.url)
-                if (existing?.aiSummary != null) {
-                    existing.toDomain()
-                } else {
-                    val summary = try {
-                        aiClient?.summarize(dto.title, dto.description ?: "", dto.source?.name ?: "Unknown", "General", "GLOBAL")
-                    } catch (e: Exception) {
-                        simulateAiSummary(dto.description ?: dto.title)
-                    }
-                    
-                    val bias = try {
-                        aiClient?.analyzeBias(dto.source?.name ?: "Unknown", dto.title, "General", "GLOBAL")
-                    } catch (e: Exception) {
-                        simulateBias(dto.source?.name ?: "", "General")
-                    }
-                    
-                    NewsArticle(
-                        url = dto.url,
-                        title = dto.title,
-                        description = dto.description,
-                        urlToImage = dto.urlToImage,
-                        publishedAt = dto.publishedAt,
-                        sourceName = dto.source?.name,
-                        aiSummary = summary,
-                        aiBias = bias,
-                        isFavorite = newsDao.isArticleFavorite(dto.url)
-                    )
-                }
-            }
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return emptyList()
+
+        // 1. Instant local search from Room Database (Offline first, Romanian & Global RSS)
+        val localResults = try {
+            newsDao.searchArticles(cleanQuery).map { it.toDomain() }
         } catch (e: Exception) {
-            e.printStackTrace()
             emptyList()
         }
+
+        // 2. Supplementary remote search from NewsAPI if online and API key present
+        val remoteResults = if (apiKey.isNotBlank() && cleanQuery.length >= 2) {
+            try {
+                val response = RetrofitClient.newsApi.searchNews(apiKey = apiKey, query = cleanQuery)
+                response.articles.map { dto ->
+                    val existing = newsDao.getArticleByUrl(dto.url)
+                    if (existing != null) {
+                        existing.toDomain()
+                    } else {
+                        NewsArticle(
+                            url = dto.url,
+                            title = dto.title,
+                            description = dto.description,
+                            urlToImage = dto.urlToImage,
+                            publishedAt = dto.publishedAt,
+                            sourceName = dto.source?.name,
+                            aiSummary = simulateAiSummary(dto.description ?: dto.title),
+                            aiBias = simulateBias(dto.source?.name ?: "", "General"),
+                            isFavorite = newsDao.isArticleFavorite(dto.url),
+                            region = "GLOBAL",
+                            category = "General"
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } else {
+            emptyList()
+        }
+
+        // Return combined list, local first, deduplicated by URL
+        return (localResults + remoteResults).distinctBy { it.url }
+    }
+
+    suspend fun getArticleByUrl(url: String): NewsArticle? {
+        return newsDao.getArticleByUrl(url)?.toDomain()
     }
 
     private suspend fun fetchFromNewsApi(apiKey: String, category: String, country: String, entities: MutableList<NewsArticleEntity>) {

@@ -74,6 +74,52 @@ class NewsRepositoryTest {
         override suspend fun deleteOldArticles(threshold: String) {
             articles.entries.removeIf { !it.value.isFavorite && it.value.publishedAt < threshold }
         }
+
+        override suspend fun searchArticles(query: String): List<NewsArticleEntity> {
+            val q = query.lowercase()
+            return articles.values.filter {
+                it.title.lowercase().contains(q) ||
+                (it.description?.lowercase()?.contains(q) == true) ||
+                (it.sourceName?.lowercase()?.contains(q) == true)
+            }
+        }
+    }
+
+    @Test
+    fun searchNews_returnsOfflineLocalArticles_first() = runTest {
+        val fakeDao = FakeNewsDao()
+        val repo = NewsRepository(newsDao = fakeDao)
+
+        fakeDao.insertArticles(listOf(
+            NewsArticleEntity(
+                url = "https://digi24.ro/stire-1",
+                title = "Romania creste investitiile in AI si tehnologie",
+                description = "Guvernul aloca fonduri pentru digitalizare",
+                urlToImage = null,
+                publishedAt = "2026-09-13T05:00:00Z",
+                sourceName = "Digi24",
+                category = "Tehnologie",
+                region = "RO"
+            ),
+            NewsArticleEntity(
+                url = "https://zf.ro/stire-2",
+                title = "Bursa de la Bucuresti atinge noi recorduri",
+                description = "Indicele BET creste sustinut de energie",
+                urlToImage = null,
+                publishedAt = "2026-09-13T04:30:00Z",
+                sourceName = "Ziarul Financiar",
+                category = "Business & Finanțe",
+                region = "RO"
+            )
+        ))
+
+        val results = repo.searchNews(apiKey = "", query = "tehnologie")
+        assertEquals(1, results.size)
+        assertEquals("Romania creste investitiile in AI si tehnologie", results[0].title)
+
+        val bursaResults = repo.searchNews(apiKey = "", query = "Bucuresti")
+        assertEquals(1, bursaResults.size)
+        assertEquals("Bursa de la Bucuresti atinge noi recorduri", bursaResults[0].title)
     }
 
     @Test

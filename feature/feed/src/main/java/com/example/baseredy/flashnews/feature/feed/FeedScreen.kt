@@ -24,6 +24,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,7 +81,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val aiInsights by viewModel.aiInsights.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     
-    var selectedArticleForDetail by remember { mutableStateOf<NewsArticle?>(null) }
+    val selectedArticleForDetail by viewModel.selectedArticleForDetail.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     var playingArticleUrl by remember { mutableStateOf<String?>(null) }
@@ -214,7 +217,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                         onPlayAudio = { onToggleAudio(article) },
                         onShare = { shareArticle(context, article) },
                         onBookmark = { viewModel.toggleBookmark(article) },
-                        onClick = { selectedArticleForDetail = article }
+                        onClick = { viewModel.selectArticleForDetail(article) }
                     )
                 }
             }
@@ -262,8 +265,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     if (selectedArticleForDetail != null) {
         ModalBottomSheet(
             onDismissRequest = { 
-                selectedArticleForDetail = null
-                viewModel.clearChat()
+                viewModel.selectArticleForDetail(null)
             },
             sheetState = sheetState,
             containerColor = Color(0xFF1C1C1E),
@@ -280,8 +282,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 onPlayTts = onPlayText,
                 onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) },
                 onClose = {
-                    selectedArticleForDetail = null
-                    viewModel.clearChat()
+                    viewModel.selectArticleForDetail(null)
                 }
             )
         }
@@ -519,7 +520,7 @@ fun NewsCard(
                         modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
-                            imageVector = if (isPlayingAudio) Icons.Default.StopCircle else Icons.Default.VolumeUp,
+                            imageVector = if (isPlayingAudio) Icons.Default.StopCircle else Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = if (isPlayingAudio) "Oprește audio" else "Ascultă rezumatul audio",
                             tint = if (isPlayingAudio) MaterialTheme.colorScheme.secondary else Color.White,
                             modifier = Modifier.size(28.dp)
@@ -776,7 +777,7 @@ fun ArticleDetailContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "PERSPECTIVĂ 360° & ANTI-MANIPULARE",
@@ -833,7 +834,7 @@ fun ArticleDetailContent(
                 AssistChip(
                     onClick = { onAskQuestion(q) },
                     label = { Text(q, fontSize = 11.sp) },
-                    leadingIcon = { Icon(Icons.Default.HelpOutline, null, modifier = Modifier.size(14.dp)) }
+                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, null, modifier = Modifier.size(14.dp)) }
                 )
             }
         }
@@ -893,7 +894,7 @@ fun ArticleDetailContent(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.VolumeUp,
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Ascultă răspunsul la viteză rapidă",
                                 tint = MaterialTheme.colorScheme.secondary,
                                 modifier = Modifier.size(20.dp)

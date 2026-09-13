@@ -46,4 +46,7 @@ interface NewsDao {
     @Query("SELECT * FROM news_articles WHERE category = :category ORDER BY publishedAt DESC LIMIT :limit")
     suspend fun getRecentArticlesByCategory(category: String, limit: Int): List<NewsArticleEntity>
 
+    @Query("SELECT * FROM news_articles WHERE title LIKE '%' || :query || '%' OR description LIKE '%' || :query || '%' OR sourceName LIKE '%' || :query || '%' ORDER BY publishedAt DESC LIMIT 50")
+    suspend fun searchArticles(query: String): List<NewsArticleEntity>
+
 }

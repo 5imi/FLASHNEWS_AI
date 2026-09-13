@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class FeedViewModel(application: Application) : AndroidViewModel(application) {
     // Initialize multi-agent AI system with orchestrator
     private val geminiClient = GeminiClient(BuildConfig.GEMINI_API_KEY)
@@ -95,6 +96,25 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
+
+    private val _selectedArticleForDetail = MutableStateFlow<NewsArticle?>(null)
+    val selectedArticleForDetail: StateFlow<NewsArticle?> = _selectedArticleForDetail
+
+    fun selectArticleForDetail(article: NewsArticle?) {
+        _selectedArticleForDetail.value = article
+        if (article == null) {
+            clearChat()
+        }
+    }
+
+    fun openArticleByUrl(url: String) {
+        viewModelScope.launch {
+            val article = repository.getArticleByUrl(url)
+            if (article != null) {
+                _selectedArticleForDetail.value = article
+            }
+        }
+    }
 
     private val _chatResponse = MutableStateFlow<String?>(null)
     val chatResponse: StateFlow<String?> = _chatResponse
