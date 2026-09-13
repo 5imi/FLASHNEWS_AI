@@ -37,6 +37,13 @@ class NewsSyncWorker(
                     showNotification(importantNews.title, importantNews.sourceName, importantNews.link)
                 }
             }
+            // Auto-cleanup articles older than 14 days that are not bookmarked
+            runCatching {
+                val thresholdDate = java.time.ZonedDateTime.now().minusDays(14)
+                    .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                db.newsDao().deleteOldArticles(thresholdDate)
+            }
+
             Result.success()
         } catch (e: Exception) {
             e.printStackTrace()

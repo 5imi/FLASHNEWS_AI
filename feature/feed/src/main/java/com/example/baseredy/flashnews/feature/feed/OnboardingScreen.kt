@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,12 +26,15 @@ fun OnboardingScreen(
 ) {
     var selectedLanguages by remember { mutableStateOf(setOf("ro", "us")) }
     var selectedInterests by remember { mutableStateOf(setOf("General")) }
+    val haptic = LocalHapticFeedback.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .padding(24.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(48.dp))
@@ -58,6 +63,7 @@ fun OnboardingScreen(
                 label = "Română",
                 selected = selectedLanguages.contains("ro"),
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     selectedLanguages = if (selectedLanguages.contains("ro")) {
                         if (selectedLanguages.size > 1) selectedLanguages - "ro" else selectedLanguages
                     } else selectedLanguages + "ro"
@@ -67,6 +73,7 @@ fun OnboardingScreen(
                 label = "English",
                 selected = selectedLanguages.contains("us"),
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     selectedLanguages = if (selectedLanguages.contains("us")) {
                         if (selectedLanguages.size > 1) selectedLanguages - "us" else selectedLanguages
                     } else selectedLanguages + "us"
@@ -94,6 +101,7 @@ fun OnboardingScreen(
                 FilterChip(
                     selected = selectedInterests.contains(category),
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selectedInterests = if (selectedInterests.contains(category)) {
                             if (selectedInterests.size > 1) selectedInterests - category else selectedInterests
                         } else selectedInterests + category
@@ -112,7 +120,10 @@ fun OnboardingScreen(
         }
         
         Button(
-            onClick = { onComplete(selectedLanguages, selectedInterests) },
+            onClick = { 
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onComplete(selectedLanguages, selectedInterests) 
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 24.dp),
