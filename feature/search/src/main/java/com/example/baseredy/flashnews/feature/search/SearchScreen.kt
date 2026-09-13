@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ fun SearchScreen(
     val results by viewModel.searchResults.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val focusManager = LocalFocusManager.current
+    val haptic = LocalHapticFeedback.current
 
     // Debounced real-time search
     LaunchedEffect(query) {
@@ -96,7 +99,7 @@ fun SearchScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Înapoi")
                     }
                 }
@@ -121,6 +124,7 @@ fun SearchScreen(
                     FilterChip(
                         selected = query.equals(trend, ignoreCase = true),
                         onClick = { 
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             query = trend
                             viewModel.search(trend)
                         },
@@ -170,7 +174,7 @@ fun SearchScreen(
                     items(results, key = { it.url }) { article ->
                         SearchResultItem(
                             article = article, 
-                            onClick = { onArticleClick(article) }
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onArticleClick(article) }
                         )
                     }
                 }

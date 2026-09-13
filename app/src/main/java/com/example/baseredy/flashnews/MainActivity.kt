@@ -9,6 +9,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -24,12 +28,11 @@ import com.example.baseredy.flashnews.feature.feed.FeedViewModel
 import com.example.baseredy.flashnews.feature.feed.OnboardingScreen
 import com.example.baseredy.flashnews.feature.search.SearchScreen
 import com.example.baseredy.flashnews.feature.search.SearchViewModel
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
+
+    private val currentIntent = mutableStateOf<Intent?>(null)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -42,10 +45,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        currentIntent.value = intent
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentIntent.value = intent
         
         checkNotificationPermissionAndSetupWorkManager()
 
@@ -55,11 +60,14 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val feedViewModel: FeedViewModel = viewModel()
                 val onboardingCompleted by feedViewModel.onboardingCompleted.collectAsState()
+                val activeIntent by currentIntent
                 
-                LaunchedEffect(intent) {
-                    intent?.getStringExtra("article_url")?.let { url ->
+                LaunchedEffect(activeIntent) {
+                    activeIntent?.getStringExtra("article_url")?.let { url ->
                         feedViewModel.openArticleByUrl(url)
-                        navController.navigate("feed")
+                        navController.navigate("feed") {
+                            popUpTo("feed") { inclusive = false }
+                        }
                     }
                 }
 
@@ -107,7 +115,6 @@ class MainActivity : ComponentActivity() {
                     setupWorkManager()
                 }
                 shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) -> {
-                    // Măcar cerem permisiunea, util ar fi un UI
                     requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 else -> {

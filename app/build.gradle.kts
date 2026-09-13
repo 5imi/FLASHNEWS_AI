@@ -64,6 +64,7 @@ dependencies {
     implementation(project(":feature:feed"))
     implementation(project(":feature:search"))
 
+    implementation(libs.coil.compose)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.core.ktx)

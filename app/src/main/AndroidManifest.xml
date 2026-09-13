@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".FlashNewsApplication"
         android:enableOnBackInvokedCallback="true"
         android:allowBackup="true"
         android:label="FlashNews AI"

@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,6 +87,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val selectedArticleForDetail by viewModel.selectedArticleForDetail.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var playingArticleUrl by remember { mutableStateOf<String?>(null) }
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
     var speechRate by remember { mutableFloatStateOf(1.35f) }
@@ -216,10 +219,19 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                         article = article,
                         isRead = article.url in readArticleUrls,
                         isPlayingAudio = playingArticleUrl == article.url,
-                        onPlayAudio = { onToggleAudio(article) },
+                        onPlayAudio = { 
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleAudio(article) 
+                        },
                         onShare = { shareArticle(context, article) },
-                        onBookmark = { viewModel.toggleBookmark(article) },
-                        onClick = { viewModel.selectArticleForDetail(article) }
+                        onBookmark = { 
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            viewModel.toggleBookmark(article) 
+                        },
+                        onClick = { 
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.selectArticleForDetail(article) 
+                        }
                     )
                 }
             }
@@ -368,6 +380,7 @@ fun TopBar(
     onRadioClick: () -> Unit = {},
     onCatalogClick: () -> Unit = {}
 ) {
+    val haptic = LocalHapticFeedback.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -391,7 +404,7 @@ fun TopBar(
                     Row(modifier = Modifier.padding(2.dp)) {
                         FilterChip(
                             selected = selectedRegion == "RO",
-                            onClick = { viewModel.onRegionSelected("RO") },
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.onRegionSelected("RO") },
                             label = { Text("🇷🇴 RO", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -405,7 +418,7 @@ fun TopBar(
                         Spacer(modifier = Modifier.width(2.dp))
                         FilterChip(
                             selected = selectedRegion == "GLOBAL",
-                            onClick = { viewModel.onRegionSelected("GLOBAL") },
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.onRegionSelected("GLOBAL") },
                             label = { Text("🌍 GLOBAL", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
