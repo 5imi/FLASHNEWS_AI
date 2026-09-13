@@ -25,3 +25,4 @@ feature/search/build/
 .artifacts/
 .gemini/
 .vscode/
+AGENTS.md
