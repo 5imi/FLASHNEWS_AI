@@ -155,7 +155,7 @@ class GroqClient(private val apiKey: String) : AiClient {
 
     override suspend fun askQuestion(articleContext: String, question: String): String = withContext(Dispatchers.IO) {
         val prompt = "Context: $articleContext\n\nÎntrebare: $question\n\nRăspunde scurt, inteligent, în română."
-        callAi(prompt) ?: "Nu pot răspunde acum."
+        callAi(prompt) ?: throw Exception("Groq unavailable")
     }
 
     private suspend fun callAi(prompt: String): String? {

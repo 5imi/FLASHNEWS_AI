@@ -94,7 +94,10 @@ class AiOrchestrator(
 
     private fun isValid(result: Any?): Boolean {
         return when (result) {
-            is String -> result.isNotBlank() && !result.contains("indisponibil", ignoreCase = true)
+            is String -> result.isNotBlank() &&
+                         !result.contains("indisponibil", ignoreCase = true) &&
+                         !result.contains("nu pot raspunde", ignoreCase = true) &&
+                         !result.contains("nu pot răspunde", ignoreCase = true)
             is DynamicNewsAnalysis -> result.keyTakeaway.isNotBlank() && !result.keyTakeaway.contains("indisponibil", ignoreCase = true)
             else -> result != null
         }
