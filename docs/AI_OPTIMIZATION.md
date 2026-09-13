@@ -163,7 +163,7 @@ try {
 
 ### API Key (din local.properties)
 ```properties
-GEMINI_API_KEY=AIzaSy_DUMMY_KEY_FOR_TESTING
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
 ```
 
 ### Validare

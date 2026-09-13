@@ -168,6 +168,7 @@ class DynamicAiAnalysisTest {
 
     @Test
     fun liveOrchestrator_withGeminiAndLocal() = runTest {
+        // [OLD] val geminiKey = "AIzaSy_DUMMY_KEY_FOR_TESTING" // [LEGACY: exposed actual API key, replaced with safe mock for git/CI]
         val geminiKey = "AIzaSy_DUMMY_KEY_FOR_TESTING"
         val geminiClient = GeminiClient(geminiKey)
         val orchestrator = AiOrchestrator(

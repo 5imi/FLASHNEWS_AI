@@ -28,8 +28,8 @@ Open `local.properties` in project root:
 
 ```properties
 #Tue Jul 14 02:48:37 EEST 2026
-GEMINI_API_KEY=AIzaSy_DUMMY_KEY_FOR_TESTING
-GROK_API_KEY=xai_xxx_yyy_zzz  # ← YOUR KEY HERE
+GEMINI_API_KEY=your_gemini_api_key_here
+GROK_API_KEY=your_grok_api_key_here
 NEWS_API_KEY=your_news_api_key_here
 ```
 
