@@ -1,12 +1,7 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+.idea/
 .DS_Store
 /build
 /captures
@@ -24,3 +19,9 @@ core/model/build/
 core/network/build/
 feature/feed/build/
 feature/search/build/
+
+# AI Agents & IDE Artifacts
+.agents/
+.artifacts/
+.gemini/
+.vscode/
