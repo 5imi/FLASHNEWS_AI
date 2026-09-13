@@ -187,32 +187,20 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         }
     }
 
+    val isPagingLoading = articles.loadState.refresh is androidx.paging.LoadState.Loading
+    val isInitialLoading = (isLoading || isPagingLoading) && articles.itemCount == 0
+
     PullToRefreshBox(
         isRefreshing = isLoading,
         onRefresh = { viewModel.refreshNews() },
         modifier = Modifier.fillMaxSize().background(Color.Black)
     ) {
-        if (articles.itemCount > 0) {
-            val pagerState = rememberPagerState(pageCount = { articles.itemCount })
-            // [OLD] - Motiv înlocuire: VerticalPager fără `key` cauza recompoziții redundante și resetarea stării imaginilor la scroll
-            /*
-            VerticalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize()
-            ) { page ->
-                val article = articles[page]
-                if (article != null) {
-                    NewsCard(
-                        article = article,
-                        isPlayingAudio = playingArticleUrl == article.url,
-                        onPlayAudio = { onToggleAudio(article) },
-                        onShare = { shareArticle(context, article) },
-                        onBookmark = { viewModel.toggleBookmark(article) },
-                        onClick = { selectedArticleForDetail = article }
-                    )
-                }
+        if (isInitialLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-            */
+        } else if (articles.itemCount > 0) {
+            val pagerState = rememberPagerState(pageCount = { articles.itemCount })
             VerticalPager(
                 state = pagerState,
                 key = { page -> articles.peek(page)?.url ?: page },
@@ -230,7 +218,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                     )
                 }
             }
-        } else if (!isLoading) {
+        } else {
             EmptyState(
                 title = if (showOnlyFavorites) "Nicio știre salvată" else "Nicio știre găsită",
                 description = if (showOnlyFavorites) "Începe să salvezi știri din flux pentru a le vedea aici." else "Nu am putut găsi știri. Verifică conexiunea sau schimbă filtrele.",
@@ -290,7 +278,11 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 isPerspectiveLoading = isPerspectiveLoading,
                 onLoad360Perspective = { viewModel.load360Perspective(selectedArticleForDetail!!) },
                 onPlayTts = onPlayText,
-                onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) }
+                onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) },
+                onClose = {
+                    selectedArticleForDetail = null
+                    viewModel.clearChat()
+                }
             )
         }
     }
@@ -334,24 +326,31 @@ fun TopBar(
     onRadioClick: () -> Unit = {},
     onCatalogClick: () -> Unit = {}
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 40.dp)) {
-        
-        // HUB SELECTOR (ROMÂNIA / INTERNAȚIONAL)
-        if (!showOnlyFavorites) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(top = 4.dp)
+    ) {
+        // ROW 1: Hub Selector on Left/Center, Action Icons on Right
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            if (!showOnlyFavorites) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = Color.Black.copy(alpha = 0.5f),
+                    color = Color.Black.copy(alpha = 0.6f),
                     modifier = Modifier.wrapContentWidth()
                 ) {
-                    Row(modifier = Modifier.padding(4.dp)) {
+                    Row(modifier = Modifier.padding(2.dp)) {
                         FilterChip(
                             selected = selectedRegion == "RO",
                             onClick = { viewModel.onRegionSelected("RO") },
-                            label = { Text("🇷🇴 ROMÂNIA", fontWeight = FontWeight.Bold) },
+                            label = { Text("🇷🇴 RO", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 containerColor = Color.Transparent,
@@ -361,11 +360,11 @@ fun TopBar(
                             border = null,
                             shape = RoundedCornerShape(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                         FilterChip(
                             selected = selectedRegion == "GLOBAL",
                             onClick = { viewModel.onRegionSelected("GLOBAL") },
-                            label = { Text("🌍 INTERNAȚIONAL", fontWeight = FontWeight.Bold) },
+                            label = { Text("🌍 GLOBAL", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                 containerColor = Color.Transparent,
@@ -376,67 +375,74 @@ fun TopBar(
                             shape = RoundedCornerShape(20.dp)
                         )
                     }
+                }
+            } else {
+                Text(
+                    text = "⭐ Știri Salvate",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
+            // Quick Actions: Search, Radio AI, Catalog RSS, Bookmarks
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                IconButton(
+                    onClick = onRadioClick,
+                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Radio, contentDescription = "Radio AI Buletin", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+                IconButton(
+                    onClick = onCatalogClick,
+                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription = "Catalog Surse", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                IconButton(
+                    onClick = { viewModel.toggleFavoritesView() },
+                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (showOnlyFavorites) Icons.Default.Newspaper else Icons.Default.Bookmarks,
+                        contentDescription = if (showOnlyFavorites) "Comută la fluxul principal de știri" else "Comută la știrile salvate la favorite",
+                        tint = if (showOnlyFavorites) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                IconButton(
-                    onClick = onSearchClick,
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White)
-                }
-                IconButton(
-                    onClick = onRadioClick,
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Radio, contentDescription = "Radio AI Buletin", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(
-                    onClick = onCatalogClick,
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                ) {
-                    Icon(Icons.Default.FilterList, contentDescription = "Catalog Surse", tint = Color.White)
-                }
-            }
-
-            LazyRow(modifier = Modifier.weight(1f).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!showOnlyFavorites) {
-                    items(viewModel.categories) { category ->
-                        FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { viewModel.onCategorySelected(category) },
-                            label = { Text(category) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondary,
-                                containerColor = Color.Black.copy(alpha = 0.5f),
-                                labelColor = Color.White,
-                                selectedLabelColor = Color.Black
-                            ),
-                            border = null,
-                            shape = CircleShape
-                        )
-                    }
-                } else {
-                    item { Text("Știri Salvate", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) }
-                }
-            }
-
-            IconButton(
-                onClick = { viewModel.toggleFavoritesView() },
-                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+        // ROW 2: Category Chips Row (Full width horizontal scroll)
+        if (!showOnlyFavorites) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = if (showOnlyFavorites) Icons.Default.Newspaper else Icons.Default.Bookmarks,
-                    contentDescription = if (showOnlyFavorites) "Comută la fluxul principal de știri" else "Comută la știrile salvate la favorite",
-                    tint = if (showOnlyFavorites) MaterialTheme.colorScheme.primary else Color.White
-                )
+                items(viewModel.categories) { category ->
+                    FilterChip(
+                        selected = selectedCategory == category,
+                        onClick = { viewModel.onCategorySelected(category) },
+                        label = { Text(category, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                            containerColor = Color.Black.copy(alpha = 0.6f),
+                            labelColor = Color.White,
+                            selectedLabelColor = Color.Black
+                        ),
+                        border = null,
+                        shape = CircleShape
+                    )
+                }
             }
         }
     }
@@ -581,7 +587,8 @@ fun ArticleDetailContent(
     isPerspectiveLoading: Boolean = false,
     onLoad360Perspective: () -> Unit = {},
     onPlayTts: (String) -> Unit = {},
-    onAskQuestion: (String) -> Unit
+    onAskQuestion: (String) -> Unit,
+    onClose: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var questionText by remember { mutableStateOf("") }
@@ -593,16 +600,28 @@ fun ArticleDetailContent(
             .padding(24.dp)
             .padding(bottom = 32.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = article.sourceLogoUrl,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f))
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(article.sourceName ?: "Sursă Necunoscută", fontWeight = FontWeight.Bold, color = Color.White)
-                Text(article.publishedAt, fontSize = 12.sp, color = Color.Gray)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                AsyncImage(
+                    model = article.sourceLogoUrl,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f))
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(article.sourceName ?: "Sursă Necunoscută", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(article.relativeTime.ifBlank { article.publishedAt }, fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(36.dp).background(Color.White.copy(alpha = 0.1f), CircleShape)
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Închide detalii", tint = Color.White, modifier = Modifier.size(20.dp))
             }
         }
         
@@ -645,7 +664,11 @@ fun ArticleDetailContent(
             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                val timeLabel = article.aiAnalyzedAt?.let { " (analizat acum ${formatTimestamp(it)})" } ?: ""
+                val analyzedAt = article.aiAnalyzedAt
+                val timeLabel = if (analyzedAt != null && analyzedAt > 0L) {
+                    val formatted = formatTimestamp(analyzedAt)
+                    if (formatted.isNotBlank()) " (analizat acum $formatted)" else ""
+                } else ""
                 Text(
                     "Rezumat și analiză generate de AI News Analyst$timeLabel. Verifică sursa originală pentru context complet.",
                     fontSize = 12.sp,
@@ -921,12 +944,14 @@ fun ArticleDetailContent(
 }
 
 private fun formatTimestamp(timestamp: Long): String {
-    val diff = System.currentTimeMillis() - timestamp
+    if (timestamp <= 0L) return ""
+    val diff = (System.currentTimeMillis() - timestamp).coerceAtLeast(0L)
     val minutes = diff / 60000
     return when {
         minutes < 1 -> "câteva secunde"
         minutes < 60 -> "$minutes minute"
-        else -> "${minutes / 60} ore"
+        minutes < 1440 -> "${minutes / 60} ore"
+        else -> "${minutes / 1440} zile"
     }
 }
 

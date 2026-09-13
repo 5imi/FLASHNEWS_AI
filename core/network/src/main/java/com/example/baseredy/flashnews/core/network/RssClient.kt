@@ -351,6 +351,30 @@ object RssClient {
         deferredResults.awaitAll().flatten().sortedByDescending { it.pubDate }
     }
 
+    private fun cleanHtml(raw: String): String {
+        if (raw.isBlank()) return ""
+        return raw
+            .replace(Regex("<[^>]*>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&#39;", "'")
+            .replace("&rsquo;", "’")
+            .replace("&lsquo;", "‘")
+            .replace("&rdquo;", "”")
+            .replace("&ldquo;", "“")
+            .replace("&ndash;", "–")
+            .replace("&mdash;", "—")
+            .replace(Regex("&#8230;|&hellip;"), "…")
+            .replace(Regex("&#(\\d+);")) { match ->
+                val code = match.groupValues[1].toIntOrNull()
+                if (code != null && code in 32..65535) code.toChar().toString() else match.value
+            }
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun parseRss(urlString: String, sourceName: String, region: String, category: String): List<RssItem> {
         val items = mutableListOf<RssItem>()
         try {
@@ -384,13 +408,13 @@ object RssClient {
                                     insideItem = true
                                     currentTitle = ""; currentLink = ""; currentDescription = ""; currentPubDate = ""; currentImageUrl = null
                                 }
-                                insideItem && tagName == "title" -> currentTitle = safeNextText(parser)
+                                insideItem && tagName == "title" -> currentTitle = cleanHtml(safeNextText(parser))
                                 insideItem && tagName == "link" -> {
                                     val href = parser.getAttributeValue(null, "href")
                                     currentLink = if (!href.isNullOrBlank()) href else safeNextText(parser)
                                 }
                                 insideItem && (tagName == "description" || tagName == "summary") -> {
-                                    currentDescription = safeNextText(parser).replace(Regex("<[^>]*>"), "").trim()
+                                    currentDescription = cleanHtml(safeNextText(parser))
                                 }
                                 insideItem && (tagName == "pubDate" || tagName == "published" || tagName == "updated") -> {
                                     currentPubDate = safeNextText(parser)

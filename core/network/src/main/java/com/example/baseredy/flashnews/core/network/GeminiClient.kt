@@ -23,7 +23,7 @@ class GeminiClient(apiKey: String) : AiClient {
     )
 
     private val model = GenerativeModel(
-        modelName = "gemini-1.5-flash",
+        modelName = "gemini-2.0-flash",
         apiKey = apiKey,
         safetySettings = safetySettings,
         systemInstruction = content { text("Ești un analist media și jurnalist expert român. Analizezi obiectiv, identifici unghiurile critice și răspunzi strict în formatul cerut, în limba română.") }
