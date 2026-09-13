@@ -774,8 +774,85 @@ fun ArticleDetailContent(
             }
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
-        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Switcher: [✦ Sinteză AI & Analiză] vs [📖 Mod Lectură]
+        var selectedDetailTab by remember { mutableStateOf(0) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White.copy(alpha = 0.08f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                modifier = Modifier.weight(1f),
+                color = if (selectedDetailTab == 0) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+                onClick = { selectedDetailTab = 0 }
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = if (selectedDetailTab == 0) MaterialTheme.colorScheme.primary else Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Sinteză AI",
+                        fontWeight = if (selectedDetailTab == 0) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 13.sp,
+                        color = if (selectedDetailTab == 0) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
+            }
+            Surface(
+                modifier = Modifier.weight(1f),
+                color = if (selectedDetailTab == 1) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                shape = RoundedCornerShape(8.dp),
+                onClick = { selectedDetailTab = 1 }
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MenuBook,
+                        contentDescription = null,
+                        tint = if (selectedDetailTab == 1) MaterialTheme.colorScheme.primary else Color.Gray,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Mod Lectură",
+                        fontWeight = if (selectedDetailTab == 1) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 13.sp,
+                        color = if (selectedDetailTab == 1) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (selectedDetailTab == 1) {
+            ReaderModeView(
+                article = article,
+                onPlayTts = onPlayTts,
+                onShare = { shareArticle(context, article) },
+                onOpenSource = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
+                    context.startActivity(intent)
+                }
+            )
+        } else {
         Text(article.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -1088,6 +1165,7 @@ fun ArticleDetailContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Citește tot")
             }
+        }
         }
     }
 }
