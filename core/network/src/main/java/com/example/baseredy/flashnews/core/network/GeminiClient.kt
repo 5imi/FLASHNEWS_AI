@@ -1,4 +1,4 @@
-package com.example.baseredy.flashnews.core.network
+﻿package com.example.baseredy.flashnews.core.network
 
 import android.util.Log
 import com.example.baseredy.flashnews.core.model.DynamicInsight
@@ -23,13 +23,15 @@ class GeminiClient(apiKey: String) : AiClient {
     )
 
     private val model = GenerativeModel(
-        modelName = "gemini-2.0-flash",
+        modelName = "gemini-pro",
         apiKey = apiKey,
         safetySettings = safetySettings,
         systemInstruction = content { text("Ești un analist media și jurnalist expert român. Analizezi obiectiv, identifici unghiurile critice și răspunzi strict în formatul cerut, în limba română.") }
     )
 
-    private val cache = mutableMapOf<String, String>()
+    private val cache: LinkedHashMap<String, String> = object : LinkedHashMap<String, String>(50, 0.75f, true) {
+        override fun removeEldestEntry(eldest: Map.Entry<String, String>) = size > 100
+    }
     private var lastApiCallTime = 0L
     private val minDelayBetweenCalls = 100L
 

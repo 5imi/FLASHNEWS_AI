@@ -10,6 +10,12 @@ import kotlinx.coroutines.delay
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -446,116 +452,245 @@ fun TopBar(
     onCatalogClick: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
+    var showMoreMenu by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(top = 4.dp)
+            .padding(top = 8.dp)
     ) {
-        // ROW 1: Hub Selector on Left/Center, Action Icons on Right
+        // ROW 1: Sleek Region Selector on Left, Balanced Action Icons on Right
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 14.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             if (!showOnlyFavorites) {
+                // Compact Segmented Pill: RO vs Global
                 Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color.Black.copy(alpha = 0.6f),
-                    modifier = Modifier.wrapContentWidth()
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.Black.copy(alpha = 0.65f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    modifier = Modifier.height(34.dp)
                 ) {
-                    Row(modifier = Modifier.padding(2.dp)) {
-                        FilterChip(
-                            selected = selectedRegion == "RO",
-                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.onRegionSelected("RO") },
-                            label = { Text("🇷🇴 RO", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                containerColor = Color.Transparent,
-                                labelColor = Color.White,
-                                selectedLabelColor = Color.Black
-                            ),
-                            border = null,
-                            shape = RoundedCornerShape(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        FilterChip(
-                            selected = selectedRegion == "GLOBAL",
-                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); viewModel.onRegionSelected("GLOBAL") },
-                            label = { Text("🌍 GLOBAL", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                containerColor = Color.Transparent,
-                                labelColor = Color.White,
-                                selectedLabelColor = Color.Black
-                            ),
-                            border = null,
-                            shape = RoundedCornerShape(20.dp)
-                        )
+                    Row(
+                        modifier = Modifier.padding(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (selectedRegion == "RO") MaterialTheme.colorScheme.primary else Color.Transparent
+                                )
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    viewModel.onRegionSelected("RO")
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🇷🇴 RO",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = if (selectedRegion == "RO") Color.Black else Color.White
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    if (selectedRegion == "GLOBAL") MaterialTheme.colorScheme.primary else Color.Transparent
+                                )
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    viewModel.onRegionSelected("GLOBAL")
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🌍 Global",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = if (selectedRegion == "GLOBAL") Color.Black else Color.White
+                            )
+                        }
                     }
                 }
             } else {
-                Text(
-                    text = "⭐ Știri Salvate",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
+                // Header when viewing Favorites
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable { viewModel.toggleFavoritesView() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Înapoi la toate știrile",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "⭐ Știri Salvate",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
             }
 
-            // Quick Actions: Search, Radio AI, Commute Mode, Catalog RSS, Bookmarks
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Right Quick Actions: Search, Radio AI, Commute Mode, More Menu
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 1. Search Button
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Caută știri",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // 2. Radio AI Button (Signature AI Bulletin)
+                IconButton(
+                    onClick = onRadioClick,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Radio,
+                        contentDescription = "Radio AI Buletin",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // 3. Commute Mode Toggle (Headset)
                 IconButton(
                     onClick = onToggleCommuteMode,
-                    modifier = Modifier.size(38.dp).background(
-                        if (isCommuteMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.6f),
-                        CircleShape
-                    )
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            if (isCommuteMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else Color.Black.copy(alpha = 0.65f),
+                            CircleShape
+                        )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Headset,
                         contentDescription = "Mod Navetă • Redare continuă",
                         tint = if (isCommuteMode) MaterialTheme.colorScheme.primary else Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-                IconButton(
-                    onClick = onSearchClick,
-                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-                IconButton(
-                    onClick = onRadioClick,
-                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                ) {
-                    Icon(Icons.Default.Radio, contentDescription = "Radio AI Buletin", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                }
-                IconButton(
-                    onClick = onStatsClick,
-                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                ) {
-                    Icon(Icons.Default.BarChart, contentDescription = "Statistici lectură", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-                IconButton(
-                    onClick = onCatalogClick,
-                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                ) {
-                    Icon(Icons.Default.FilterList, contentDescription = "Catalog Surse", tint = Color.White, modifier = Modifier.size(20.dp))
-                }
-                IconButton(
-                    onClick = { viewModel.toggleFavoritesView() },
-                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                ) {
-                    Icon(
-                        imageVector = if (showOnlyFavorites) Icons.Default.Newspaper else Icons.Default.Bookmarks,
-                        contentDescription = if (showOnlyFavorites) "Comută la fluxul principal de știri" else "Comută la știrile salvate la favorite",
-                        tint = if (showOnlyFavorites) MaterialTheme.colorScheme.primary else Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+
+                // 4. More Options Menu (DropdownMenu with Bookmarks, Stats, Catalog)
+                Box {
+                    IconButton(
+                        onClick = { showMoreMenu = true },
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Mai multe opțiuni",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                        modifier = Modifier
+                            .background(Color(0xFF1E1E24))
+                            .clip(RoundedCornerShape(12.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (showOnlyFavorites) "Flux principal" else "Știri Salvate",
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (showOnlyFavorites) Icons.Default.Newspaper else Icons.Default.Bookmarks,
+                                    contentDescription = null,
+                                    tint = if (showOnlyFavorites) MaterialTheme.colorScheme.primary else Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                viewModel.toggleFavoritesView()
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Statistici Lectură",
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.BarChart,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onStatsClick()
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = "Catalog Surse RSS",
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.FilterList,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onCatalogClick()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -565,7 +700,7 @@ fun TopBar(
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(viewModel.categories) { category ->
@@ -586,34 +721,67 @@ fun TopBar(
             }
         }
 
-        AnimatedVisibility(visible = isCommuteMode) {
-            Row(
+        // ROW 3: Commute Mode Active Banner (High contrast, elegant pill with quick dismiss)
+        AnimatedVisibility(
+            visible = isCommuteMode,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF16161A).copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 14.dp, vertical = 2.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.22f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headset,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Mod Navetă Activ",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Redare vocală continuă automată",
+                                color = Color(0xFFB0B0B8),
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onToggleCommuteMode,
+                        modifier = Modifier.size(26.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Headset,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Mod Navetă Activ • Redare continuă automată",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Oprește Modul Navetă",
+                            tint = Color.LightGray,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
