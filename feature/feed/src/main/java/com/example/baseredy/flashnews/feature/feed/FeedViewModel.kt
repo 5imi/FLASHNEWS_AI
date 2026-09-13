@@ -1,5 +1,8 @@
 package com.example.baseredy.flashnews.feature.feed
 
+import com.example.baseredy.flashnews.core.data.NetworkMonitor
+import com.example.baseredy.flashnews.core.data.ConnectivityNetworkMonitor
+
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -24,7 +27,10 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class FeedViewModel(application: Application) : AndroidViewModel(application) {
+class FeedViewModel @JvmOverloads constructor(
+    application: Application,
+    private val networkMonitor: NetworkMonitor = ConnectivityNetworkMonitor(application)
+) : AndroidViewModel(application) {
     // Initialize multi-agent AI system with orchestrator
     private val geminiClient = GeminiClient(BuildConfig.GEMINI_API_KEY)
     private val grokClient = GrokClient(BuildConfig.GROK_API_KEY ?: "")
@@ -102,6 +108,21 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _readArticleUrls = MutableStateFlow<Set<String>>(prefsRepository.getReadArticleUrls())
     val readArticleUrls: StateFlow<Set<String>> = _readArticleUrls
+
+    init {
+        viewModelScope.launch {
+            networkMonitor.isOnline.collect { online ->
+                if (!online) {
+                    _isOffline.value = true
+                } else {
+                    if (_isOffline.value) {
+                        _isOffline.value = false
+                        refreshNews()
+                    }
+                }
+            }
+        }
+    }
 
     fun markArticleAsRead(url: String) {
         viewModelScope.launch {
