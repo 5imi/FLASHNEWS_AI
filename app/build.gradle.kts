@@ -15,8 +15,8 @@ android {
         targetSdk = 35
         // [OLD] versionCode = 5
         // [OLD] versionName = "1.2.6"
-        versionCode = 7
-        versionName = "1.3.2"
+        versionCode = 8
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
@@ -56,6 +56,9 @@ android {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:data"))
+    implementation(project(":core:database"))
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
     implementation(project(":core:network"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:feed"))

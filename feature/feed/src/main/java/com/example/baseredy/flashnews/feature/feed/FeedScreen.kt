@@ -83,6 +83,13 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val context = LocalContext.current
     var playingArticleUrl by remember { mutableStateOf<String?>(null) }
     var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+    var speechRate by remember { mutableFloatStateOf(1.35f) }
+    var isPlayingRadio by remember { mutableStateOf(false) }
+    var showRadioSheet by remember { mutableStateOf(false) }
+    var showCatalogSheet by remember { mutableStateOf(false) }
+
+    val perspective360 by viewModel.perspective360.collectAsState()
+    val isPerspectiveLoading by viewModel.isPerspectiveLoading.collectAsState()
 
     DisposableEffect(context) {
         var tts: TextToSpeech? = null
@@ -93,15 +100,18 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts?.setLanguage(Locale.ENGLISH)
                 }
+                tts?.setSpeechRate(speechRate)
             }
         }
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
                 playingArticleUrl = null
+                isPlayingRadio = false
             }
             override fun onError(utteranceId: String?) {
                 playingArticleUrl = null
+                isPlayingRadio = false
             }
         })
         ttsEngine = tts
@@ -109,6 +119,31 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         onDispose {
             tts?.stop()
             tts?.shutdown()
+        }
+    }
+
+    val onPlayText: (String) -> Unit = { text ->
+        val tts = ttsEngine
+        if (tts != null) {
+            tts.stop()
+            tts.setSpeechRate(speechRate)
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "FlashNews_Text_Utterance")
+        }
+    }
+
+    val onTogglePlayRadio: (String) -> Unit = { script ->
+        val tts = ttsEngine
+        if (tts != null) {
+            if (isPlayingRadio) {
+                tts.stop()
+                isPlayingRadio = false
+            } else {
+                tts.stop()
+                playingArticleUrl = null
+                isPlayingRadio = true
+                tts.setSpeechRate(speechRate)
+                tts.speak(script, TextToSpeech.QUEUE_FLUSH, null, "FlashNews_Radio_Briefing")
+            }
         }
     }
 
@@ -133,6 +168,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                         append(article.description)
                     }
                 }
+                tts.setSpeechRate(speechRate)
                 tts.speak(textToRead, TextToSpeech.QUEUE_FLUSH, null, "FlashNews_Utterance")
             }
         }
@@ -229,7 +265,9 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         selectedRegion = selectedRegion,
         selectedCategory = selectedCategory,
         showOnlyFavorites = showOnlyFavorites,
-        onSearchClick = onSearchClick
+        onSearchClick = onSearchClick,
+        onRadioClick = { showRadioSheet = true },
+        onCatalogClick = { showCatalogSheet = true }
     )
 
     // Detail Bottom Sheet
@@ -248,14 +286,54 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 chatResponse = chatResponse,
                 aiInsights = aiInsights,
                 isChatLoading = isChatLoading,
+                perspective360 = perspective360,
+                isPerspectiveLoading = isPerspectiveLoading,
+                onLoad360Perspective = { viewModel.load360Perspective(selectedArticleForDetail!!) },
+                onPlayTts = onPlayText,
                 onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) }
             )
         }
     }
+
+    if (showRadioSheet) {
+        RadioBriefingSheet(
+            viewModel = viewModel,
+            ttsEngine = ttsEngine,
+            isPlayingRadio = isPlayingRadio,
+            onTogglePlayRadio = onTogglePlayRadio,
+            speechRate = speechRate,
+            onSpeechRateChange = { newRate ->
+                speechRate = newRate
+                ttsEngine?.setSpeechRate(newRate)
+            },
+            onDismiss = { 
+                showRadioSheet = false
+                if (isPlayingRadio) {
+                    ttsEngine?.stop()
+                    isPlayingRadio = false
+                }
+            }
+        )
+    }
+
+    if (showCatalogSheet) {
+        RssCatalogSheet(
+            viewModel = viewModel,
+            onDismiss = { showCatalogSheet = false }
+        )
+    }
 }
 
 @Composable
-fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: String, showOnlyFavorites: Boolean, onSearchClick: () -> Unit) {
+fun TopBar(
+    viewModel: FeedViewModel, 
+    selectedRegion: String, 
+    selectedCategory: String, 
+    showOnlyFavorites: Boolean, 
+    onSearchClick: () -> Unit,
+    onRadioClick: () -> Unit = {},
+    onCatalogClick: () -> Unit = {}
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 40.dp)) {
         
         // HUB SELECTOR (ROMÂNIA / INTERNAȚIONAL)
@@ -307,11 +385,25 @@ fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: S
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(
-                onClick = onSearchClick,
-                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                IconButton(
+                    onClick = onSearchClick,
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = "Caută știri", tint = Color.White)
+                }
+                IconButton(
+                    onClick = onRadioClick,
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Radio, contentDescription = "Radio AI Buletin", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(
+                    onClick = onCatalogClick,
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription = "Catalog Surse", tint = Color.White)
+                }
             }
 
             LazyRow(modifier = Modifier.weight(1f).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -485,6 +577,10 @@ fun ArticleDetailContent(
     chatResponse: String?,
     aiInsights: List<AiInsight>,
     isChatLoading: Boolean,
+    perspective360: String? = null,
+    isPerspectiveLoading: Boolean = false,
+    onLoad360Perspective: () -> Unit = {},
+    onPlayTts: (String) -> Unit = {},
     onAskQuestion: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -644,7 +740,82 @@ fun ArticleDetailContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 🌐 PERSPECTIVĂ 360° & ANTI-MANIPULARE (COMPARAȚIE ZIARE)
+        Spacer(modifier = Modifier.height(20.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CompareArrows, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "PERSPECTIVĂ 360° & ANTI-MANIPULARE",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp
+                        )
+                    }
+                    if (perspective360 == null && !isPerspectiveLoading) {
+                        TextButton(onClick = onLoad360Perspective) {
+                            Text("Compară ziarele", fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                if (isPerspectiveLoading) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("AI-ul compară relatarea subiectului între mai multe redacții...", fontSize = 12.sp, color = Color.LightGray)
+                    }
+                } else if (perspective360 != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = perspective360!!,
+                        fontSize = 13.sp,
+                        lineHeight = 19.sp,
+                        color = Color.White.copy(alpha = 0.95f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Verifică automat dacă faptele relatate coincid cu alte publicații și dacă există nuanțe sau omisiuni.",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+
+        // 💬 ÎNTREABĂ ȘTIREA - CIPURI RAPIDE
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Întreabă AI despre acest subiect:", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        val quickQuestions = listOf(
+            "Cum mă afectează direct?",
+            "Context istoric pe scurt",
+            "Explică ca unui copil de 10 ani",
+            "Ce spun vocile critice?"
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(quickQuestions) { q ->
+                AssistChip(
+                    onClick = { onAskQuestion(q) },
+                    label = { Text(q, fontSize = 11.sp) },
+                    leadingIcon = { Icon(Icons.Default.HelpOutline, null, modifier = Modifier.size(14.dp)) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         TextField(
             value = questionText,
@@ -682,13 +853,38 @@ fun ArticleDetailContent(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = chatResponse,
-                    modifier = Modifier.padding(16.dp),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Răspuns AI:",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontSize = 12.sp
+                        )
+                        IconButton(
+                            onClick = { onPlayTts(chatResponse) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Ascultă răspunsul la viteză rapidă",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = chatResponse,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                }
             }
         }
 

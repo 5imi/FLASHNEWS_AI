@@ -456,4 +456,67 @@ object RssClient {
         }
         return ZonedDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
     }
+
+    fun getAllCatalogSources(): List<RssSource> = sources
+
+    suspend fun fetchFromCustomSources(customSources: List<RssSource>): List<RssItem> = coroutineScope {
+        if (customSources.isEmpty()) return@coroutineScope emptyList()
+        val customSemaphore = Semaphore(8)
+        val deferredList = customSources.map { source ->
+            async(Dispatchers.IO) {
+                customSemaphore.withPermit {
+                    parseRss(source.url, source.name, source.region, source.category)
+                }
+            }
+        }
+        deferredList.awaitAll().flatten()
+    }
+
+    suspend fun validateRssFeed(urlString: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(urlString.trim())
+            val connection = url.openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 7000
+            connection.readTimeout = 7000
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; FlashNews/1.4)")
+            connection.instanceFollowRedirects = true
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                return@withContext Pair(false, "Serverul a returnat HTTP " + responseCode)
+            }
+            var channelTitle = ""
+            var itemCount = 0
+            val parser = Xml.newPullParser()
+            connection.inputStream.use { stream ->
+                parser.setInput(stream, null)
+                var eventType = parser.eventType
+                var insideChannel = false
+                while (eventType != XmlPullParser.END_DOCUMENT) {
+                    val tagName = parser.name ?: ""
+                    when (eventType) {
+                        XmlPullParser.START_TAG -> {
+                            if (tagName.equals("channel", ignoreCase = true) || tagName.equals("feed", ignoreCase = true)) {
+                                insideChannel = true
+                            } else if (tagName.equals("title", ignoreCase = true) && insideChannel && channelTitle.isBlank()) {
+                                channelTitle = safeNextText(parser)
+                            } else if (tagName.equals("item", ignoreCase = true) || tagName.equals("entry", ignoreCase = true)) {
+                                itemCount++
+                                if (itemCount >= 3) break
+                            }
+                        }
+                    }
+                    eventType = parser.next()
+                }
+            }
+            if (itemCount > 0) {
+                val titleDisplay = if (channelTitle.isNotBlank()) channelTitle else "Flux RSS Valid"
+                Pair(true, titleDisplay)
+            } else {
+                Pair(false, "Nu s-au gasit articole in format RSS/Atom")
+            }
+        } catch (e: Exception) {
+            Pair(false, e.localizedMessage ?: "Eroare la conectare")
+        }
+    }
+
 }

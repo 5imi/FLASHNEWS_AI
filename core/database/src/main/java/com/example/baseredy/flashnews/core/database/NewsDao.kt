@@ -36,4 +36,14 @@ interface NewsDao {
 
     @Query("DELETE FROM news_articles WHERE isFavorite = 0 AND publishedAt < :threshold")
     suspend fun deleteOldArticles(threshold: String)
+
+    @Query("SELECT * FROM news_articles WHERE sourceName IN (:sources) ORDER BY publishedAt DESC")
+    fun getArticlesBySources(sources: List<String>): PagingSource<Int, NewsArticleEntity>
+
+    @Query("SELECT * FROM news_articles ORDER BY publishedAt DESC LIMIT :limit")
+    suspend fun getRecentArticles(limit: Int): List<NewsArticleEntity>
+
+    @Query("SELECT * FROM news_articles WHERE category = :category ORDER BY publishedAt DESC LIMIT :limit")
+    suspend fun getRecentArticlesByCategory(category: String, limit: Int): List<NewsArticleEntity>
+
 }

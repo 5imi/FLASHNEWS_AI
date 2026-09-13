@@ -2,6 +2,9 @@ package com.example.baseredy.flashnews.core.data
 
 import com.example.baseredy.flashnews.core.database.NewsDao
 import com.example.baseredy.flashnews.core.database.NewsArticleEntity
+import com.example.baseredy.flashnews.core.database.CustomRssFeedDao
+import com.example.baseredy.flashnews.core.database.CustomRssFeedEntity
+import com.example.baseredy.flashnews.core.network.RssSource
 import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.DynamicInsight
 import com.example.baseredy.flashnews.core.model.DynamicNewsAnalysis
@@ -31,7 +34,8 @@ import androidx.paging.map
 
 class NewsRepository(
     private val newsDao: NewsDao,
-    private val aiClient: AiClient? = null
+    private val aiClient: AiClient? = null,
+    private val customFeedDao: CustomRssFeedDao? = null
 ) {
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jsonSerializer = Json {
@@ -41,7 +45,16 @@ class NewsRepository(
     }
 
     fun getArticles(region: String, category: String): Flow<PagingData<NewsArticle>> {
-        val pagingSourceFactory = if (category == "Toate") {
+        val pagingSourceFactory = if (category.contains("Sursele Mele") || category.contains("⭐")) {
+            val followed = runCatching { 
+                kotlinx.coroutines.runBlocking { customFeedDao?.getFollowedFeedsSync()?.map { it.name } } 
+            }.getOrNull() ?: emptyList()
+            if (followed.isNotEmpty()) {
+                { newsDao.getArticlesBySources(followed) }
+            } else {
+                { newsDao.getArticlesByRegion(region) }
+            }
+        } else if (category == "Toate") {
             { newsDao.getArticlesByRegion(region) }
         } else {
             { newsDao.getArticlesByRegionAndCategory(region, category) }
@@ -581,4 +594,170 @@ class NewsRepository(
             ""
         }
     }
+
+    // ==========================================
+    
+    // ==========================================
+    // CATALOG RSS & SURSELE MELE
+    // ==========================================
+    fun getAllCatalogSources(): List<RssSource> = RssClient.getAllCatalogSources()
+
+    fun getFollowedFeeds(): Flow<List<CustomRssFeedEntity>>? = customFeedDao?.getAllFeeds()
+
+    suspend fun toggleFollowSource(name: String, url: String, category: String, region: String, isFollowed: Boolean) {
+        if (isFollowed) {
+            customFeedDao?.insertOrUpdate(
+                CustomRssFeedEntity(
+                    name = name,
+                    url = url,
+                    category = category,
+                    region = region,
+                    isFollowed = true,
+                    isCustomUrl = false
+                )
+            )
+        } else {
+            customFeedDao?.updateFollowStatus(url, false)
+        }
+    }
+
+    suspend fun addCustomFeed(url: String, customName: String? = null, category: String = "Personalizat"): Pair<Boolean, String> {
+        val (valid, result) = RssClient.validateRssFeed(url)
+        if (!valid) return Pair(false, result)
+        val finalName = if (!customName.isNullOrBlank()) customName.trim() else result
+        customFeedDao?.insertOrUpdate(
+            CustomRssFeedEntity(
+                name = finalName,
+                url = url.trim(),
+                category = category,
+                region = "RO",
+                isFollowed = true,
+                isCustomUrl = true
+            )
+        )
+        return Pair(true, finalName)
+    }
+
+    suspend fun deleteCustomFeed(url: String) {
+        customFeedDao?.deleteFeedByUrl(url)
+    }
+
+    // ==========================================
+    // RADIO AI - BULETINUL ZILEI (PODCAST)
+    // ==========================================
+    suspend fun generateDailyRadioBriefing(): String {
+        val recent = newsDao.getRecentArticles(25)
+        if (recent.isEmpty()) {
+            return "Buna dimineata! Nu avem articole recente disponibile in memorie. Te rugam sa tragi in jos pentru reimprospatare."
+        }
+        val selected = mutableListOf<NewsArticleEntity>()
+        val seenCategories = mutableSetOf<String>()
+        for (item in recent) {
+            if (item.category !in seenCategories && selected.size < 5) {
+                seenCategories.add(item.category)
+                selected.add(item)
+            }
+        }
+        if (selected.size < 3) {
+            selected.clear()
+            selected.addAll(recent.take(5))
+        }
+
+        val headlinesList = selected.mapIndexed { idx, it ->
+            val takeaway = it.aiSummary?.takeIf { s -> !s.startsWith("{") } ?: it.description ?: ""
+            "${idx + 1}. [${it.category} - ${it.sourceName}] ${it.title}. ${takeaway.take(200)}"
+        }.joinToString("\n")
+
+        val prompt = "Esti un prezentator de radio profesionist, cald, alert si concis pentru FlashNews AI. Creeaza un buletin radio de 2 minute in limba ROMANA pe baza acestor evenimente:\n" + headlinesList + "\n\nIncepe cu 'Buna dimineata! Iata sinteza celor mai importante evenimente ale momentului in FlashNews:'. Conecteaza stirile fluid cu tranzitii naturale. Incheie cu 'Aceasta a fost sinteza FlashNews AI. Ramai informat!' Fii direct, fara cuvinte de umplutura."
+        
+        return try {
+            val response = aiClient?.askQuestion("Evenimente:\n" + headlinesList, prompt)
+            if (!response.isNullOrBlank() && !response.contains("indisponibil") && !response.contains("Eroare")) {
+                response
+            } else {
+                buildFallbackRadioScript(selected)
+            }
+        } catch (e: Exception) {
+            buildFallbackRadioScript(selected)
+        }
+    }
+
+    private fun buildFallbackRadioScript(articles: List<NewsArticleEntity>): String {
+        return buildString {
+            append("Buna dimineata! Iata sinteza celor mai importante evenimente ale momentului in FlashNews. ")
+            articles.forEachIndexed { i, a ->
+                append("Stirea ")
+                append(i + 1)
+                append(": ")
+                append(a.title)
+                append(". Din categoria ")
+                append(a.category)
+                append(", transmis de ")
+                append(a.sourceName)
+                append(". ")
+                val sum = a.aiSummary?.takeIf { !it.startsWith("{") } ?: a.description
+                if (!sum.isNullOrBlank()) {
+                    append(sum.take(160).replace("\n", " "))
+                    append(". ")
+                }
+            }
+            append("Aceasta a fost sinteza rapida a zilei in FlashNews AI. O zi productiva!")
+        }
+    }
+
+    // ==========================================
+    // PERSPECTIVA 360 (COMPARATIE ZIARE)
+    // ==========================================
+    suspend fun get360Perspective(article: NewsArticle): String {
+        val keywords = article.title.split(" ")
+            .filter { it.length > 4 }
+            .map { it.lowercase().trim(',', '.', ':', '"') }
+        
+        val recent = newsDao.getRecentArticles(40).map { it.toDomain() }
+        val related = recent.filter { other ->
+            other.url != article.url && other.sourceName != article.sourceName &&
+            keywords.any { kw -> other.title.lowercase().contains(kw) }
+        }.take(3)
+
+        if (related.isEmpty()) {
+            return "Perspectiva unica: Acest eveniment a fost relatat exclusiv de " + (article.sourceName ?: "aceasta sursa") + ". Nu s-au detectat inca variatii divergente de la alte redactii in ultimele 24 de ore."
+        }
+
+        val articlesText = buildString {
+            append("1. [")
+            append(article.sourceName)
+            append("]: ")
+            append(article.title)
+            append("\n")
+            related.forEachIndexed { i, r ->
+                append(i + 2)
+                append(". [")
+                append(r.sourceName)
+                append("]: ")
+                append(r.title)
+                append("\n")
+            }
+        }
+
+        val prompt = "Analizeaza comparativ tratarea acestui subiect de catre publicatii diferite:\n" + articlesText + "\n\nStructureaza raspunsul in ROMANA:\n- Fapte confirmate unanim de toate sursele\n- Nuante si diferente de accent intre publicatii\n- Concluzie privind neutralitatea relatarii."
+        return try {
+            aiClient?.askQuestion(articlesText, prompt) ?: "Comparatie indisponibila."
+        } catch (e: Exception) {
+            "S-au identificat " + (related.size + 1) + " surse diferite raportand acest subiect. Faptele de baza coincid in privinta desfasurarii evenimentului."
+        }
+    }
+
+    suspend fun findRelatedSourcesCount(article: NewsArticle): Int {
+        val keywords = article.title.split(" ")
+            .filter { it.length > 4 }
+            .map { it.lowercase().trim(',', '.', ':', '"') }
+        if (keywords.isEmpty()) return 1
+        val recent = newsDao.getRecentArticles(30)
+        val count = recent.count { other ->
+            other.url != article.url && other.sourceName != article.sourceName &&
+            keywords.any { kw -> other.title.lowercase().contains(kw) }
+        }
+        return count + 1
+    }
+
 }

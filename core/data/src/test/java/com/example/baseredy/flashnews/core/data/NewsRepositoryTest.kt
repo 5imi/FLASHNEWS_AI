@@ -28,6 +28,9 @@ class NewsRepositoryTest {
         override fun getArticlesByRegionAndCategory(region: String, category: String): PagingSource<Int, NewsArticleEntity> = throw NotImplementedError()
         override fun getArticlesByRegion(region: String): PagingSource<Int, NewsArticleEntity> = throw NotImplementedError()
         override fun getFavoriteArticles(): PagingSource<Int, NewsArticleEntity> = throw NotImplementedError()
+        override fun getArticlesBySources(sources: List<String>): PagingSource<Int, NewsArticleEntity> = throw NotImplementedError()
+        override suspend fun getRecentArticles(limit: Int): List<NewsArticleEntity> = articles.values.take(limit)
+        override suspend fun getRecentArticlesByCategory(category: String, limit: Int): List<NewsArticleEntity> = articles.values.filter { it.category == category }.take(limit)
 
         override suspend fun insertArticles(articlesList: List<NewsArticleEntity>) {
             articlesList.forEach { articles[it.url] = it }
@@ -208,5 +211,66 @@ class NewsRepositoryTest {
         val updated = fakeDao.getArticleByUrl("https://example.com/fav-test")
         assertNotNull(updated)
         assertTrue(updated!!.isFavorite)
+    }
+
+        @Test
+    fun getAllCatalogSources_returnsNonEmptyList() {
+        val fakeDao = FakeNewsDao()
+        val repo = NewsRepository(fakeDao)
+        val sources = repo.getAllCatalogSources()
+        assertTrue(sources.isNotEmpty())
+        assertTrue(sources.any { it.name.contains("Digi24", ignoreCase = true) || it.name.contains("HotNews", ignoreCase = true) })
+        assertTrue(sources.any { it.category == "Tehnologie" || it.category == "Politică" })
+    }
+
+    @Test
+    fun generateDailyRadioBriefing_producesValidSpokenRadioScript() = runTest {
+        val fakeDao = FakeNewsDao()
+        val repo = NewsRepository(fakeDao)
+        val testArticles = listOf(
+            NewsArticleEntity(
+                url = "https://example.com/1",
+                title = "Bugetul National aprobat cu succes",
+                description = "Guvernul a finalizat rectificarea bugetara.",
+                urlToImage = null,
+                publishedAt = "2026-09-13T10:00:00Z",
+                sourceName = "Digi24",
+                category = "Politică",
+                region = "RO"
+            ),
+            NewsArticleEntity(
+                url = "https://example.com/2",
+                title = "Lansare tehnologica revolutionara in Romania",
+                description = "Un nou hub de inteligenta artificiala a fost inaugurat la Cluj.",
+                urlToImage = null,
+                publishedAt = "2026-09-13T11:00:00Z",
+                sourceName = "Zona IT",
+                category = "Tehnologie",
+                region = "RO"
+            )
+        )
+        fakeDao.insertArticles(testArticles)
+        val script = repo.generateDailyRadioBriefing()
+        assertNotNull(script)
+        assertTrue(script.contains("Bună dimineața") || script.contains("Buna dimineata"))
+        assertTrue(script.contains("FlashNews"))
+    }
+
+    @Test
+    fun get360Perspective_identifiesMultiSourceCoverage() = runTest {
+        val fakeDao = FakeNewsDao()
+        val repo = NewsRepository(fakeDao)
+        val article = NewsArticle(
+            url = "https://example.com/main",
+            title = "Protest masiv al fermierilor in capitala",
+            description = "Fermierii solicita subventii suplimentare.",
+            publishedAt = "2026-09-13T09:00:00Z",
+            sourceName = "HotNews",
+            category = "General",
+            region = "RO"
+        )
+        val perspective = repo.get360Perspective(article)
+        assertNotNull(perspective)
+        assertTrue(perspective.isNotBlank())
     }
 }

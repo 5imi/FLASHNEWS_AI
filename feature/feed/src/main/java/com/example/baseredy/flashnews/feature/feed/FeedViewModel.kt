@@ -8,6 +8,8 @@ import com.example.baseredy.flashnews.core.data.UserPreferencesRepository
 import com.example.baseredy.flashnews.core.database.NewsDatabase
 import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
+import com.example.baseredy.flashnews.core.database.CustomRssFeedEntity
+import com.example.baseredy.flashnews.core.network.RssSource
 import com.example.baseredy.flashnews.core.network.AiOrchestrator
 import com.example.baseredy.flashnews.core.network.GeminiClient
 import com.example.baseredy.flashnews.core.network.GrokClient
@@ -37,9 +39,11 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
         localAgent = localClient
     )
     
+    private val database = NewsDatabase.getDatabase(application)
     private val repository = NewsRepository(
-        NewsDatabase.getDatabase(application).newsDao(),
-        aiOrchestrator
+        database.newsDao(),
+        aiOrchestrator,
+        database.customRssFeedDao()
     )
     private val prefsRepository = UserPreferencesRepository(application)
 
@@ -56,7 +60,7 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     val onboardingCompleted: StateFlow<Boolean> = _onboardingCompleted
 
     val categories = listOf(
-        "Toate", "General", "Business & Finanțe", "Politică", "Tehnologie", 
+        "Toate", "⭐ Sursele Mele", "General", "Business & Finanțe", "Politică", "Tehnologie", 
         "Sport", "Auto", "Știință & Mediu", "Sănătate", "Lifestyle", "Educație"
     )
 
@@ -218,4 +222,87 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    // ==========================================
+    // 🗂️ CATALOG SURSE & SURSELE MELE
+    // ==========================================
+    val allCatalogSources: List<RssSource> = repository.getAllCatalogSources()
+
+    val followedFeeds: StateFlow<List<CustomRssFeedEntity>> = (repository.getFollowedFeeds() ?: flowOf(emptyList()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleFollowSource(source: RssSource, isFollowed: Boolean) {
+        viewModelScope.launch {
+            repository.toggleFollowSource(source.name, source.url, source.category, source.region, isFollowed)
+        }
+    }
+
+    fun addCustomFeed(url: String, name: String? = null, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = repository.addCustomFeed(url, name)
+            onResult(res.first, res.second)
+        }
+    }
+
+    fun deleteCustomFeed(url: String) {
+        viewModelScope.launch {
+            repository.deleteCustomFeed(url)
+        }
+    }
+
+    // ==========================================
+    // 📻 BULETIN RADIO AI (PODCAST)
+    // ==========================================
+    private val _radioBriefing = MutableStateFlow<String?>(null)
+    val radioBriefing: StateFlow<String?> = _radioBriefing
+
+    private val _isRadioLoading = MutableStateFlow(false)
+    val isRadioLoading: StateFlow<Boolean> = _isRadioLoading
+
+    fun generateRadioBriefing() {
+        viewModelScope.launch {
+            _isRadioLoading.value = true
+            try {
+                val script = repository.generateDailyRadioBriefing()
+                _radioBriefing.value = script
+            } catch (e: Exception) {
+                _radioBriefing.value = "Eroare la generarea buletinului radio. Verifica conexiunea."
+            } finally {
+                _isRadioLoading.value = false
+            }
+        }
+    }
+
+    fun clearRadioBriefing() {
+        _radioBriefing.value = null
+    }
+
+    // ==========================================
+    // 🌐 PERSPECTIVA 360 (COMPARATIE ZIARE)
+    // ==========================================
+    private val _perspective360 = MutableStateFlow<String?>(null)
+    val perspective360: StateFlow<String?> = _perspective360
+
+    private val _isPerspectiveLoading = MutableStateFlow(false)
+    val isPerspectiveLoading: StateFlow<Boolean> = _isPerspectiveLoading
+
+    fun load360Perspective(article: NewsArticle) {
+        viewModelScope.launch {
+            _isPerspectiveLoading.value = true
+            _perspective360.value = null
+            try {
+                val result = repository.get360Perspective(article)
+                _perspective360.value = result
+            } catch (e: Exception) {
+                _perspective360.value = "Analiza 360 momentan indisponibila."
+            } finally {
+                _isPerspectiveLoading.value = false
+            }
+        }
+    }
+
+    fun clear360Perspective() {
+        _perspective360.value = null
+    }
+
 }
