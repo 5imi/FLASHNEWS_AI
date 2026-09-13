@@ -804,4 +804,27 @@ class NewsRepository(
         return count + 1
     }
 
+    suspend fun exportOpml(): String {
+        val followed = customFeedDao?.getFollowedFeedsSync() ?: emptyList()
+        return OpmlManager.exportToOpml(followed)
+    }
+
+    suspend fun importOpml(xmlContent: String): Int {
+        val dao = customFeedDao ?: return 0
+        val parsed = OpmlManager.parseOpml(xmlContent)
+        for (item in parsed) {
+            dao.insertOrUpdate(
+                com.example.baseredy.flashnews.core.database.CustomRssFeedEntity(
+                    name = item.title,
+                    url = item.xmlUrl,
+                    category = item.category,
+                    region = "RO",
+                    isFollowed = true,
+                    isCustomUrl = true
+                )
+            )
+        }
+        return parsed.size
+    }
+
 }

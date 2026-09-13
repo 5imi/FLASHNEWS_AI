@@ -1,5 +1,8 @@
 package com.example.baseredy.flashnews.feature.feed
 
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +41,10 @@ fun RssCatalogSheet(
     var isValidating by remember { mutableStateOf(false) }
 
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    var showOpmlImportDialog by remember { mutableStateOf(false) }
+    var opmlImportText by remember { mutableStateOf("") }
+    var opmlImportStatus by remember { mutableStateOf<String?>(null) }
 
     val categories = remember {
         listOf("Toate", "Urmărite", "Politică", "Tehnologie", "Business & Finanțe", "Sport", "Auto", "Presă Internațională", "General")
@@ -227,6 +234,44 @@ fun RssCatalogSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // OPML Import / Export Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { showOpmlImportDialog = true },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Import OPML", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = {
+                        viewModel.exportOpml { opmlXml ->
+                            val sendIntent = Intent().apply {
+                                action = Intent.ACTION_SEND
+                                putExtra(Intent.EXTRA_TEXT, opmlXml)
+                                putExtra(Intent.EXTRA_TITLE, "FlashNews_Feeds.opml")
+                                type = "text/xml"
+                            }
+                            val shareIntent = Intent.createChooser(sendIntent, "Exportă colecția RSS (OPML)")
+                            context.startActivity(shareIntent)
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Export OPML", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
@@ -298,5 +343,103 @@ fun RssCatalogSheet(
                 }
             }
         }
+    }
+
+
+    if (showOpmlImportDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showOpmlImportDialog = false 
+                opmlImportStatus = null
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Importă fluxuri OPML", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Lipește conținutul fișierului OPML (XML) exportat din Feedly, Inoreader sau alt cititor RSS:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = opmlImportText,
+                        onValueChange = { opmlImportText = it },
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                        placeholder = { Text("<?xml version=\"1.0\"?>\n<opml> ... </opml>", fontSize = 12.sp) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            clipboardManager.getText()?.let {
+                                opmlImportText = it.text
+                            }
+                        }) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Lipește", fontSize = 12.sp)
+                        }
+
+                        TextButton(onClick = {
+                            opmlImportText = """<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Tech & Stiri RO</title></head>
+  <body>
+    <outline text="Tehnologie" title="Tehnologie">
+      <outline type="rss" text="Hacker News" title="Hacker News" xmlUrl="https://news.ycombinator.com/rss"/>
+      <outline type="rss" text="TechCrunch" title="TechCrunch" xmlUrl="https://techcrunch.com/feed/"/>
+    </outline>
+    <outline text="Actualitate" title="Actualitate">
+      <outline type="rss" text="G4Media" title="G4Media" xmlUrl="https://www.g4media.ro/feed"/>
+    </outline>
+  </body>
+</opml>""".trimIndent()
+                        }) {
+                            Text("Demo OPML", fontSize = 12.sp)
+                        }
+                    }
+
+                    opmlImportStatus?.let {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (opmlImportText.isNotBlank()) {
+                            viewModel.importOpml(opmlImportText) { count ->
+                                opmlImportStatus = "Importat cu succes: $count fluxuri RSS!"
+                                if (count > 0) {
+                                    opmlImportText = ""
+                                }
+                            }
+                        }
+                    },
+                    enabled = opmlImportText.isNotBlank()
+                ) {
+                    Text("Importă")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showOpmlImportDialog = false 
+                    opmlImportStatus = null
+                }) {
+                    Text("Închide")
+                }
+            }
+        )
     }
 }

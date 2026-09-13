@@ -367,4 +367,21 @@ class FeedViewModel @JvmOverloads constructor(
         _perspective360.value = null
     }
 
+    fun exportOpml(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val opml = repository.exportOpml()
+            onResult(opml)
+        }
+    }
+
+    fun importOpml(xmlContent: String, onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            val count = repository.importOpml(xmlContent)
+            if (count > 0) {
+                refreshNews()
+            }
+            onComplete(count)
+        }
+    }
+
 }
