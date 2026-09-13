@@ -477,9 +477,14 @@ class NewsRepository(
             }
         }
 
+        val cleanedDescription = description
+            ?.replace(Regex("""\[\s*(&#8230;|&hellip;|…|\.\.\.)\s*\]"""), "…")
+            ?.replace(Regex("""&#8230;|&hellip;"""), "…")
+            ?.trim()
+
         return NewsArticle(
             title = title,
-            description = description,
+            description = cleanedDescription ?: description,
             url = url,
             urlToImage = urlToImage,
             publishedAt = publishedAt,

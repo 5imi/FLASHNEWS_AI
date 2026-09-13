@@ -38,13 +38,17 @@ class FlashNewsWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(R.id.widget_source, "RO & Global")
                 }
 
-                // Intent to open MainActivity on click
+                // Intent to open MainActivity and deep-link directly to this article
                 val intent = Intent(context, MainActivity::class.java).apply {
+                    if (article != null) {
+                        putExtra("article_url", article.url)
+                        data = android.net.Uri.parse(article.url)
+                    }
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
                 val pendingIntent = PendingIntent.getActivity(
                     context,
-                    0,
+                    appWidgetId,
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
