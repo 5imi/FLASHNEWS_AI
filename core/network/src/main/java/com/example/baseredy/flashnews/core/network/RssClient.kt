@@ -323,17 +323,24 @@ object RssClient {
     private const val MAX_ITEMS_PER_SOURCE = 10
     private val semaphore = Semaphore(12) // Limit concurrency to 12 sources at a time
 
-    suspend fun fetchRssNews(targetRegion: String? = null, targetCategory: String? = null): List<RssItem> = coroutineScope {
-        val filteredSources = if (targetRegion == null && targetCategory == null) {
-            sources
+    suspend fun fetchRssNews(
+        targetRegion: String? = null, 
+        targetCategory: String? = null,
+        extraSources: List<RssSource> = emptyList()
+    ): List<RssItem> = coroutineScope {
+        val allSources = (sources + extraSources).distinctBy { it.url }
+        val filteredSources = if (targetCategory != null && (targetCategory.contains("Sursele Mele") || targetCategory.contains("⭐"))) {
+            extraSources.ifEmpty { allSources }
+        } else if (targetRegion == null && targetCategory == null) {
+            allSources
         } else {
-            sources.filter { source ->
+            allSources.filter { source ->
                 val regionMatch = targetRegion == null || targetRegion == "ALL" || source.region == targetRegion
                 val categoryMatch = targetCategory == null || targetCategory == "Toate" || 
                                     source.category.equals(targetCategory, ignoreCase = true) || 
                                     source.category == "General" // Keep General for important context
                 regionMatch && categoryMatch
-            }.ifEmpty { sources }
+            }.ifEmpty { allSources }
         }
 
         val deferredResults = filteredSources.map { source ->
@@ -342,13 +349,16 @@ object RssClient {
                     try {
                         parseRss(source.url, source.name, source.region, source.category)
                     } catch (e: Exception) {
-                        println("RSS_DEBUG: Error fetching ${source.name}: ${e.message}")
                         emptyList<RssItem>()
                     }
                 }
             }
         }
         deferredResults.awaitAll().flatten().sortedByDescending { it.pubDate }
+    }
+
+    fun fetchSingleFeed(urlString: String, sourceName: String, region: String = "RO", category: String = "General"): List<RssItem> {
+        return parseRss(urlString, sourceName, region, category)
     }
 
     private fun cleanHtml(raw: String): String {

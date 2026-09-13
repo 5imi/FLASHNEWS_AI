@@ -115,9 +115,9 @@ class NewsRepository(
             // 4. Fetch from RSS
             val shouldFetchRss = region == "RO" || category == "General" || category == "Toate" || entities.size < 5
             if (shouldFetchRss) {
-                // [OLD] - Motiv înlocuire: Apelul fără parametri descărca 150+ feed-uri RSS indiferent de selecția utilizatorului
-                // val rssItems = RssClient.fetchRssNews()
-                val rssItems = RssClient.fetchRssNews(targetRegion = region, targetCategory = category)
+                val customFeeds = runCatching { customFeedDao?.getFollowedFeedsSync() }.getOrNull() ?: emptyList()
+                val extraSources = customFeeds.map { RssSource(name = it.name, url = it.url, category = it.category, region = it.region) }
+                val rssItems = RssClient.fetchRssNews(targetRegion = region, targetCategory = category, extraSources = extraSources)
 
                 val filteredRss = rssItems.filter { item ->
                     val regionMatch = item.region == region
@@ -636,16 +636,44 @@ class NewsRepository(
         val (valid, result) = RssClient.validateRssFeed(url)
         if (!valid) return Pair(false, result)
         val finalName = if (!customName.isNullOrBlank()) customName.trim() else result
-        customFeedDao?.insertOrUpdate(
-            CustomRssFeedEntity(
-                name = finalName,
-                url = url.trim(),
-                category = category,
-                region = "RO",
-                isFollowed = true,
-                isCustomUrl = true
-            )
+        val entity = CustomRssFeedEntity(
+            name = finalName,
+            url = url.trim(),
+            category = category,
+            region = "RO",
+            isFollowed = true,
+            isCustomUrl = true
         )
+        customFeedDao?.insertOrUpdate(entity)
+
+        // Proactively fetch initial articles for this newly added feed
+        repositoryScope.launch {
+            try {
+                val items = RssClient.fetchSingleFeed(url.trim(), finalName, "RO", category)
+                val articleEntities = items.map { rss ->
+                    NewsArticleEntity(
+                        url = rss.link,
+                        title = rss.title,
+                        description = rss.description,
+                        urlToImage = rss.imageUrl,
+                        publishedAt = rss.pubDate,
+                        sourceName = rss.sourceName,
+                        category = rss.category,
+                        region = rss.region,
+                        aiSummary = simulateAiSummary(rss.description ?: rss.title),
+                        aiBias = simulateBias(rss.sourceName, rss.category),
+                        aiLocalImpact = null,
+                        aiAnalyzedAt = 0L,
+                        isFavorite = false,
+                        isMultiPerspective = false
+                    )
+                }
+                newsDao.insertArticlesIfAbsent(articleEntities)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         return Pair(true, finalName)
     }
 

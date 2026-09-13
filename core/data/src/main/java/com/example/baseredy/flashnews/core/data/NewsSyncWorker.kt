@@ -47,9 +47,13 @@ class NewsSyncWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            // Fetch priority RO & General RSS items for efficient background sync
-            val rssItems = RssClient.fetchRssNews(targetRegion = "RO", targetCategory = "General")
             val db = NewsDatabase.getDatabase(appContext)
+            val followedFeeds = runCatching { db.customRssFeedDao().getFollowedFeedsSync() }.getOrNull() ?: emptyList()
+            val extraSources = followedFeeds.map { 
+                com.example.baseredy.flashnews.core.network.RssSource(name = it.name, url = it.url, category = it.category, region = it.region) 
+            }
+            // Fetch priority RO & General RSS items + any followed/custom feeds for efficient background sync
+            val rssItems = RssClient.fetchRssNews(targetRegion = "RO", targetCategory = "General", extraSources = extraSources)
 
             // Pre-cache new items in Room database
             if (rssItems.isNotEmpty()) {
