@@ -230,22 +230,53 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
             )
         }
         
-        // Error Banner
-        if (isOffline) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 100.dp, start = 16.dp, end = 16.dp)
-                    .background(Color.Red.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-                    .align(Alignment.TopCenter)
+        // Modern Interactive Offline Banner
+        AnimatedVisibility(
+            visible = isOffline,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 115.dp, start = 16.dp, end = 16.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF2C1515).copy(alpha = 0.95f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF6B6B).copy(alpha = 0.4f)),
+                shadowElevation = 6.dp
             ) {
-                Text(
-                    text = errorMessage ?: "Ești offline. Se afișează datele salvate local.",
-                    color = Color.White,
-                    modifier = Modifier.padding(12.dp),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.WifiOff,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6B6B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = errorMessage ?: "Mod Offline • Se afișează știrile din memorie",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2
+                        )
+                    }
+                    TextButton(
+                        onClick = { viewModel.refreshNews() },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Reîncearcă", color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }
@@ -265,6 +296,10 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     if (selectedArticleForDetail != null) {
         ModalBottomSheet(
             onDismissRequest = { 
+                if (playingArticleUrl != null) {
+                    ttsEngine?.stop()
+                    playingArticleUrl = null
+                }
                 viewModel.selectArticleForDetail(null)
             },
             sheetState = sheetState,
@@ -282,6 +317,10 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 onPlayTts = onPlayText,
                 onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) },
                 onClose = {
+                    if (playingArticleUrl != null) {
+                        ttsEngine?.stop()
+                        playingArticleUrl = null
+                    }
                     viewModel.selectArticleForDetail(null)
                 }
             )
