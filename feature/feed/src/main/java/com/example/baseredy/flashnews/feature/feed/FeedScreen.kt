@@ -80,6 +80,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val chatResponse by viewModel.chatResponse.collectAsState()
     val aiInsights by viewModel.aiInsights.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
+    val readArticleUrls by viewModel.readArticleUrls.collectAsState()
     
     val selectedArticleForDetail by viewModel.selectedArticleForDetail.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -213,6 +214,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 if (article != null) {
                     NewsCard(
                         article = article,
+                        isRead = article.url in readArticleUrls,
                         isPlayingAudio = playingArticleUrl == article.url,
                         onPlayAudio = { onToggleAudio(article) },
                         onShare = { shareArticle(context, article) },
@@ -491,6 +493,7 @@ fun TopBar(
 @Composable
 fun NewsCard(
     article: NewsArticle,
+    isRead: Boolean = false,
     isPlayingAudio: Boolean = false,
     onPlayAudio: () -> Unit = {},
     onShare: () -> Unit = {},
@@ -531,6 +534,14 @@ fun NewsCard(
                             " • ${article.relativeTime}", 
                             fontSize = 12.sp, 
                             color = Color.White.copy(alpha = 0.6f)
+                        )
+                    }
+                    if (isRead) {
+                        Text(
+                            " • Citit",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Medium
                         )
                     }
                     val bias = article.aiBias

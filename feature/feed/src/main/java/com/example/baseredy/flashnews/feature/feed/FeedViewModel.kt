@@ -100,9 +100,21 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedArticleForDetail = MutableStateFlow<NewsArticle?>(null)
     val selectedArticleForDetail: StateFlow<NewsArticle?> = _selectedArticleForDetail
 
+    private val _readArticleUrls = MutableStateFlow<Set<String>>(prefsRepository.getReadArticleUrls())
+    val readArticleUrls: StateFlow<Set<String>> = _readArticleUrls
+
+    fun markArticleAsRead(url: String) {
+        viewModelScope.launch {
+            prefsRepository.markArticleAsRead(url)
+            _readArticleUrls.value = prefsRepository.getReadArticleUrls()
+        }
+    }
+
     fun selectArticleForDetail(article: NewsArticle?) {
         _selectedArticleForDetail.value = article
-        if (article == null) {
+        if (article != null) {
+            markArticleAsRead(article.url)
+        } else {
             clearChat()
         }
     }

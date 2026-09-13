@@ -36,4 +36,18 @@ class UserPreferencesRepository(context: Context) {
     fun setInterests(interests: Set<String>) {
         sharedPreferences.edit().putStringSet(KEY_INTERESTS, interests).apply()
     }
+
+    fun getReadArticleUrls(): Set<String> {
+        return sharedPreferences.getStringSet("read_article_urls", emptySet()) ?: emptySet()
+    }
+
+    fun markArticleAsRead(url: String) {
+        val current = getReadArticleUrls().toMutableSet()
+        if (current.size > 300) {
+            val oldest = current.firstOrNull()
+            if (oldest != null) current.remove(oldest)
+        }
+        current.add(url)
+        sharedPreferences.edit().putStringSet("read_article_urls", current).apply()
+    }
 }
