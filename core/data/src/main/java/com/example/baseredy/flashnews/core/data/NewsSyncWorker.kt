@@ -85,20 +85,28 @@ class NewsSyncWorker(
                 db.newsDao().insertArticlesIfAbsent(entities)
             }
             
-            // Check for keywords indicating major breaking news
-            val keywords = listOf("Urgență", "Lege", "Fiscal", "Guvern", "Codul Fiscal", "Impozit", "TVA", "Alertă")
-            
+            // Check for keywords indicating major breaking news or user-tracked topics
+            val prefs = UserPreferencesRepository(appContext)
+            val userKeywords = prefs.getTrackedKeywords()
+            val systemKeywords = listOf("Urgență", "Lege", "Fiscal", "Guvern", "Codul Fiscal", "Impozit", "TVA", "Alertă")
+            val allKeywords = (systemKeywords + userKeywords).distinct()
+
+            var matchedKeyword: String? = null
             val importantNews = rssItems.firstOrNull { item ->
-                keywords.any { keyword -> 
-                    item.title.contains(keyword, ignoreCase = true) 
-                }
+                allKeywords.firstOrNull { keyword ->
+                    item.title.contains(keyword, ignoreCase = true) || item.description.contains(keyword, ignoreCase = true)
+                }?.also { matchedKeyword = it } != null
             }
 
             if (importantNews != null) {
                 val existing = db.newsDao().getArticleByUrl(importantNews.link)
-                // If it was fresh before this sync or newly notified
                 if (existing == null || existing.aiAnalyzedAt == 0L) {
-                    showNotification(importantNews.title, importantNews.sourceName, importantNews.link)
+                    val notifSource = if (matchedKeyword != null && matchedKeyword in userKeywords) {
+                        "Alertă #$matchedKeyword • ${importantNews.sourceName}"
+                    } else {
+                        importantNews.sourceName
+                    }
+                    showNotification(importantNews.title, notifSource, importantNews.link)
                 }
             }
 

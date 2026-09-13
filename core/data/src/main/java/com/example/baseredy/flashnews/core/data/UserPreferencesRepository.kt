@@ -50,4 +50,20 @@ class UserPreferencesRepository(context: Context) {
         current.add(url)
         sharedPreferences.edit().putStringSet("read_article_urls", current).apply()
     }
+
+    fun getTrackedKeywords(): Set<String> {
+        return sharedPreferences.getStringSet("tracked_keywords", setOf("Fiscal", "TVA", "AI", "România")) ?: setOf("Fiscal", "TVA", "AI", "România")
+    }
+
+    fun addTrackedKeyword(keyword: String) {
+        val current = getTrackedKeywords().toMutableSet()
+        current.add(keyword.trim())
+        sharedPreferences.edit().putStringSet("tracked_keywords", current).apply()
+    }
+
+    fun removeTrackedKeyword(keyword: String) {
+        val current = getTrackedKeywords().toMutableSet()
+        current.remove(keyword.trim())
+        sharedPreferences.edit().putStringSet("tracked_keywords", current).apply()
+    }
 }

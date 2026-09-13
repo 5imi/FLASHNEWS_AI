@@ -14,6 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     val results by viewModel.searchResults.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val trackedKeywords by viewModel.trackedKeywords.collectAsState()
     val focusManager = LocalFocusManager.current
     val haptic = LocalHapticFeedback.current
 
@@ -80,6 +83,20 @@ fun SearchScreen(
                         ),
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (query.isNotBlank()) {
+                                    val isTracked = trackedKeywords.any { it.equals(query.trim(), ignoreCase = true) }
+                                    IconButton(onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.toggleTrackKeyword(query.trim())
+                                    }) {
+                                        Icon(
+                                            imageVector = if (isTracked) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                                            contentDescription = if (isTracked) "Dezactivează alerta" else "Activează alerta",
+                                            tint = if (isTracked) MaterialTheme.colorScheme.primary else Color.Gray,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
                                 if (query.isNotEmpty()) {
                                     IconButton(onClick = { 
                                         query = "" 
@@ -131,6 +148,51 @@ fun SearchScreen(
                         label = { Text("#$trend", fontSize = 12.sp) },
                         shape = CircleShape
                     )
+                }
+            }
+
+            if (trackedKeywords.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.NotificationsActive,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Alerte de știri active", 
+                        style = MaterialTheme.typography.labelLarge, 
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(trackedKeywords.toList(), key = { it }) { kw ->
+                        InputChip(
+                            selected = query.equals(kw, ignoreCase = true),
+                            onClick = { 
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                query = kw
+                                viewModel.search(kw)
+                            },
+                            label = { Text("#$kw", fontSize = 12.sp) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { 
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        viewModel.toggleTrackKeyword(kw) 
+                                    },
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Șterge alertă", modifier = Modifier.size(12.dp))
+                                }
+                            },
+                            shape = CircleShape
+                        )
+                    }
                 }
             }
 

@@ -44,6 +44,23 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
+    private val prefsRepository = com.example.baseredy.flashnews.core.data.UserPreferencesRepository(application)
+    private val _trackedKeywords = MutableStateFlow<Set<String>>(prefsRepository.getTrackedKeywords())
+    val trackedKeywords: StateFlow<Set<String>> = _trackedKeywords
+
+    fun toggleTrackKeyword(keyword: String) {
+        val trimmed = keyword.trim()
+        if (trimmed.isBlank()) return
+        val current = prefsRepository.getTrackedKeywords()
+        val existing = current.firstOrNull { it.equals(trimmed, ignoreCase = true) }
+        if (existing != null) {
+            prefsRepository.removeTrackedKeyword(existing)
+        } else {
+            prefsRepository.addTrackedKeyword(trimmed)
+        }
+        _trackedKeywords.value = prefsRepository.getTrackedKeywords()
+    }
+
     val trends = listOf("AI", "SpaceX", "Tesla", "Bitcoin", "Climate", "Healthcare")
 
     fun search(query: String) {
