@@ -1,6 +1,11 @@
 package com.example.baseredy.flashnews.feature.feed
 
 import android.content.Intent
+import android.content.Context
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import java.util.Locale
+
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -38,6 +43,27 @@ import com.example.baseredy.flashnews.core.model.AiInsight
 import com.example.baseredy.flashnews.core.model.NewsArticle
 import com.example.baseredy.flashnews.core.designsystem.component.EmptyState
 
+
+fun shareArticle(context: Context, article: NewsArticle) {
+    val shareText = buildString {
+        append("📰 *${article.title}*\n\n")
+        val summary = article.aiSummary
+        if (!summary.isNullOrBlank()) {
+            append("🤖 *Sinteză AI:*\n$summary\n\n")
+        } else if (!article.description.isNullOrBlank()) {
+            append("${article.description}\n\n")
+        }
+        append("🔗 Sursă: ${article.sourceName ?: "FlashNews AI"}\n")
+        append("${article.url}\n\n")
+        append("Trimis prin FlashNews AI ⚡")
+    }
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        putExtra(Intent.EXTRA_TEXT, shareText)
+        type = "text/plain"
+    }
+    context.startActivity(Intent.createChooser(sendIntent, "Distribuie știrea"))
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
@@ -54,6 +80,64 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     
     var selectedArticleForDetail by remember { mutableStateOf<NewsArticle?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    var playingArticleUrl by remember { mutableStateOf<String?>(null) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(context) {
+        var tts: TextToSpeech? = null
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val ro = Locale("ro", "RO")
+                val result = tts?.setLanguage(ro)
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    tts?.setLanguage(Locale.ENGLISH)
+                }
+            }
+        }
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                playingArticleUrl = null
+            }
+            override fun onError(utteranceId: String?) {
+                playingArticleUrl = null
+            }
+        })
+        ttsEngine = tts
+
+        onDispose {
+            tts?.stop()
+            tts?.shutdown()
+        }
+    }
+
+    val onToggleAudio: (NewsArticle) -> Unit = { article ->
+        val tts = ttsEngine
+        if (tts != null) {
+            if (playingArticleUrl == article.url) {
+                tts.stop()
+                playingArticleUrl = null
+            } else {
+                tts.stop()
+                playingArticleUrl = article.url
+                val textToRead = buildString {
+                    append(article.title)
+                    append(". ")
+                    val summary = article.aiSummary
+                    if (!summary.isNullOrBlank()) {
+                        append("Sinteză AI: ")
+                        val clean = summary.replace("\n", ". ").replace("•", "").replace("*", "")
+                        append(clean)
+                    } else if (!article.description.isNullOrBlank()) {
+                        append(article.description)
+                    }
+                }
+                tts.speak(textToRead, TextToSpeech.QUEUE_FLUSH, null, "FlashNews_Utterance")
+            }
+        }
+    }
+
 
     LaunchedEffect(Unit) {
         if (articles.itemCount == 0 && !showOnlyFavorites) {
@@ -84,6 +168,9 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 if (article != null) {
                     NewsCard(
                         article = article,
+                        isPlayingAudio = playingArticleUrl == article.url,
+                        onPlayAudio = { onToggleAudio(article) },
+                        onShare = { shareArticle(context, article) },
                         onBookmark = { viewModel.toggleBookmark(article) },
                         onClick = { selectedArticleForDetail = article }
                     )
@@ -99,6 +186,9 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 if (article != null) {
                     NewsCard(
                         article = article,
+                        isPlayingAudio = playingArticleUrl == article.url,
+                        onPlayAudio = { onToggleAudio(article) },
+                        onShare = { shareArticle(context, article) },
                         onBookmark = { viewModel.toggleBookmark(article) },
                         onClick = { selectedArticleForDetail = article }
                     )
@@ -261,7 +351,14 @@ fun TopBar(viewModel: FeedViewModel, selectedRegion: String, selectedCategory: S
 }
 
 @Composable
-fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) {
+fun NewsCard(
+    article: NewsArticle,
+    isPlayingAudio: Boolean = false,
+    onPlayAudio: () -> Unit = {},
+    onShare: () -> Unit = {},
+    onBookmark: () -> Unit,
+    onClick: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize().clickable(onClickLabel = "Deschide analiza detaliată a știrii") { onClick() }) {
         AsyncImage(
             model = article.urlToImage,
@@ -318,16 +415,40 @@ fun NewsCard(article: NewsArticle, onBookmark: () -> Unit, onClick: () -> Unit) 
                         }
                     }
                 }
-                IconButton(
-                    onClick = onBookmark,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = if (article.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = if (article.isFavorite) "Elimină știrea din favorite" else "Salvează știrea la favorite",
-                        tint = if (article.isFavorite) MaterialTheme.colorScheme.primary else Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onPlayAudio,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlayingAudio) Icons.Default.StopCircle else Icons.Default.VolumeUp,
+                            contentDescription = if (isPlayingAudio) "Oprește audio" else "Ascultă rezumatul audio",
+                            tint = if (isPlayingAudio) MaterialTheme.colorScheme.secondary else Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onShare,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Distribuie știrea",
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onBookmark,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (article.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = if (article.isFavorite) "Elimină din favorite" else "Salvează la favorite",
+                            tint = if (article.isFavorite) MaterialTheme.colorScheme.primary else Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
 
@@ -573,17 +694,32 @@ fun ArticleDetailContent(
 
         Spacer(modifier = Modifier.height(32.dp))
         
-        Button(
-            onClick = { 
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
-                context.startActivity(intent)
-            },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            shape = RoundedCornerShape(12.dp)
+                Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Deschide sursa originală în browser extern")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Citește Articolul Complet")
+            OutlinedButton(
+                onClick = { shareArticle(context, article) },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Share, contentDescription = "Distribuie")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Distribuie")
+            }
+
+            Button(
+                onClick = { 
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
+                    context.startActivity(intent)
+                },
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Deschide sursa originală în browser extern")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Citește tot")
+            }
         }
     }
 }
