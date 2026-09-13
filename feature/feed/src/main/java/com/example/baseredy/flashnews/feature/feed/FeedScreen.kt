@@ -5,6 +5,8 @@ import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
@@ -83,6 +85,10 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val aiInsights by viewModel.aiInsights.collectAsState()
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     val readArticleUrls by viewModel.readArticleUrls.collectAsState()
+    val isCommuteMode by viewModel.isCommuteMode.collectAsState()
+    val pagerState = rememberPagerState(pageCount = { articles.itemCount })
+    val coroutineScope = rememberCoroutineScope()
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     
     val selectedArticleForDetail by viewModel.selectedArticleForDetail.collectAsState()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -97,37 +103,6 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
 
     val perspective360 by viewModel.perspective360.collectAsState()
     val isPerspectiveLoading by viewModel.isPerspectiveLoading.collectAsState()
-
-    DisposableEffect(context) {
-        var tts: TextToSpeech? = null
-        tts = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val ro = Locale("ro", "RO")
-                val result = tts?.setLanguage(ro)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts?.setLanguage(Locale.ENGLISH)
-                }
-                tts?.setSpeechRate(speechRate)
-            }
-        }
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) {
-                playingArticleUrl = null
-                isPlayingRadio = false
-            }
-            override fun onError(utteranceId: String?) {
-                playingArticleUrl = null
-                isPlayingRadio = false
-            }
-        })
-        ttsEngine = tts
-
-        onDispose {
-            tts?.stop()
-            tts?.shutdown()
-        }
-    }
 
     val onPlayText: (String) -> Unit = { text ->
         val tts = ttsEngine
@@ -181,6 +156,55 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         }
     }
 
+    DisposableEffect(context) {
+        var tts: TextToSpeech? = null
+        tts = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val ro = Locale("ro", "RO")
+                val result = tts?.setLanguage(ro)
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    tts?.setLanguage(Locale.ENGLISH)
+                }
+                tts?.setSpeechRate(speechRate)
+            }
+        }
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId == "FlashNews_Utterance" && isCommuteMode) {
+                    mainHandler.post {
+                        coroutineScope.launch {
+                            val nextIndex = pagerState.currentPage + 1
+                            if (nextIndex < articles.itemCount) {
+                                pagerState.animateScrollToPage(nextIndex)
+                                val nextArticle = articles.peek(nextIndex)
+                                if (nextArticle != null) {
+                                    viewModel.markArticleAsRead(nextArticle.url)
+                                    kotlinx.coroutines.delay(600)
+                                    onToggleAudio(nextArticle)
+                                }
+                            } else {
+                                playingArticleUrl = null
+                            }
+                        }
+                    }
+                } else {
+                    playingArticleUrl = null
+                    isPlayingRadio = false
+                }
+            }
+            override fun onError(utteranceId: String?) {
+                playingArticleUrl = null
+                isPlayingRadio = false
+            }
+        })
+        ttsEngine = tts
+
+        onDispose {
+            tts?.stop()
+            tts?.shutdown()
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (articles.itemCount == 0 && !showOnlyFavorites) {
@@ -207,7 +231,6 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
         } else if (articles.itemCount > 0) {
-            val pagerState = rememberPagerState(pageCount = { articles.itemCount })
             VerticalPager(
                 state = pagerState,
                 key = { page -> articles.peek(page)?.url ?: page },
@@ -301,6 +324,18 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         selectedRegion = selectedRegion,
         selectedCategory = selectedCategory,
         showOnlyFavorites = showOnlyFavorites,
+        isCommuteMode = isCommuteMode,
+        onToggleCommuteMode = {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            viewModel.toggleCommuteMode()
+            if (!isCommuteMode && playingArticleUrl == null && articles.itemCount > 0) {
+                val currentArticle = articles.peek(pagerState.currentPage)
+                if (currentArticle != null) {
+                    viewModel.markArticleAsRead(currentArticle.url)
+                    onToggleAudio(currentArticle)
+                }
+            }
+        },
         onSearchClick = onSearchClick,
         onRadioClick = { showRadioSheet = true },
         onCatalogClick = { showCatalogSheet = true }
@@ -372,10 +407,12 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
 
 @Composable
 fun TopBar(
-    viewModel: FeedViewModel, 
-    selectedRegion: String, 
-    selectedCategory: String, 
-    showOnlyFavorites: Boolean, 
+    viewModel: FeedViewModel,
+    selectedRegion: String,
+    selectedCategory: String,
+    showOnlyFavorites: Boolean,
+    isCommuteMode: Boolean = false,
+    onToggleCommuteMode: () -> Unit = {},
     onSearchClick: () -> Unit,
     onRadioClick: () -> Unit = {},
     onCatalogClick: () -> Unit = {}
@@ -441,8 +478,22 @@ fun TopBar(
                 )
             }
 
-            // Quick Actions: Search, Radio AI, Catalog RSS, Bookmarks
+            // Quick Actions: Search, Radio AI, Commute Mode, Catalog RSS, Bookmarks
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onToggleCommuteMode,
+                    modifier = Modifier.size(38.dp).background(
+                        if (isCommuteMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.6f),
+                        CircleShape
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Headset,
+                        contentDescription = "Mod Navetă • Redare continuă",
+                        tint = if (isCommuteMode) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
                 IconButton(
                     onClick = onSearchClick,
                     modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
@@ -497,6 +548,40 @@ fun TopBar(
                         border = null,
                         shape = CircleShape
                     )
+                }
+            }
+        }
+
+        AnimatedVisibility(visible = isCommuteMode) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Headset,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Mod Navetă Activ • Redare continuă automată",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

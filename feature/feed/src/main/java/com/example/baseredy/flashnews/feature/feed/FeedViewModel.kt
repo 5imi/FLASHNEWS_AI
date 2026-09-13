@@ -109,6 +109,15 @@ class FeedViewModel @JvmOverloads constructor(
     private val _readArticleUrls = MutableStateFlow<Set<String>>(prefsRepository.getReadArticleUrls())
     val readArticleUrls: StateFlow<Set<String>> = _readArticleUrls
 
+    private val _isCommuteMode = MutableStateFlow(prefsRepository.isCommuteModeEnabled())
+    val isCommuteMode: StateFlow<Boolean> = _isCommuteMode
+
+    fun toggleCommuteMode() {
+        val next = !_isCommuteMode.value
+        prefsRepository.setCommuteModeEnabled(next)
+        _isCommuteMode.value = next
+    }
+
     init {
         viewModelScope.launch {
             networkMonitor.isOnline.collect { online ->

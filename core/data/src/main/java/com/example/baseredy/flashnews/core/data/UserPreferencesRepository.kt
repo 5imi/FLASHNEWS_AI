@@ -66,4 +66,12 @@ class UserPreferencesRepository(context: Context) {
         current.remove(keyword.trim())
         sharedPreferences.edit().putStringSet("tracked_keywords", current).apply()
     }
+
+    fun isCommuteModeEnabled(): Boolean {
+        return sharedPreferences.getBoolean("commute_mode_enabled", false)
+    }
+
+    fun setCommuteModeEnabled(enabled: Boolean) {
+        sharedPreferences.edit().putBoolean("commute_mode_enabled", enabled).apply()
+    }
 }
