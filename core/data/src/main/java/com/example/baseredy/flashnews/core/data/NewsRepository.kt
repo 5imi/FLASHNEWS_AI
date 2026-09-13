@@ -504,12 +504,18 @@ class NewsRepository(
         )
     }
 
-    suspend fun askAi(article: NewsArticle, question: String): String {
-        val context = "Titlu: ${article.title}. Descriere: ${article.description?.take(1500) ?: ""}"
+    suspend fun askAi(article: NewsArticle, question: String, tone: String = "EXECUTIV"): String {
+        val toneInstruction = when (tone.uppercase()) {
+            "SIMPLU" -> "Raspunde intr-un limbaj simplu, prietenos si foarte clar (stil ELI5), fara jargon."
+            "CRITIC" -> "Analizeaza critic aceasta perspectiva, investigheaza eventualele omisiuni si verifica factual nuantele."
+            else -> "Raspunde concis, structurat si orientat pe fapte cheie si impact (stil executiv / business)."
+        }
+        val context = "Titlu: " + article.title + ". Descriere: " + (article.description?.take(1500) ?: "")
+        val formattedQuestion = "[Ton: " + toneInstruction + "]\nIntrebare: " + question
         val response = try {
-            aiClient?.askQuestion(context, question) ?: "AI indisponibil."
+            aiClient?.askQuestion(context, formattedQuestion) ?: "AI indisponibil."
         } catch (e: Exception) {
-            "Eroare AI - verifică conexiunea."
+            "Eroare AI - verifica conexiunea."
         }
         return response
     }

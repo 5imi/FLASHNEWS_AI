@@ -192,10 +192,30 @@ class FeedViewModel @JvmOverloads constructor(
         }
     }
 
+    private val _aiTone = MutableStateFlow(prefsRepository.getAiTone())
+    val aiTone: StateFlow<String> = _aiTone.asStateFlow()
+
+    fun setAiTone(tone: String) {
+        prefsRepository.setAiTone(tone)
+        _aiTone.value = tone
+    }
+
+    private val _articlesReadCount = MutableStateFlow(prefsRepository.getArticlesReadCount())
+    val articlesReadCount: StateFlow<Int> = _articlesReadCount.asStateFlow()
+
+    private val _audioMinutesListened = MutableStateFlow(prefsRepository.getAudioMinutesListened())
+    val audioMinutesListened: StateFlow<Int> = _audioMinutesListened.asStateFlow()
+
+    fun recordArticleRead(article: NewsArticle) {
+        prefsRepository.markArticleAsRead(article.url)
+        prefsRepository.incrementArticlesReadCount()
+        _articlesReadCount.value = prefsRepository.getArticlesReadCount()
+    }
+
     fun askAiAboutArticle(article: NewsArticle, question: String) {
         viewModelScope.launch {
             _isChatLoading.value = true
-            _chatResponse.value = repository.askAi(article, question)
+            _chatResponse.value = repository.askAi(article, question, tone = _aiTone.value)
             _isChatLoading.value = false
         }
     }

@@ -53,22 +53,33 @@ import com.example.baseredy.flashnews.core.designsystem.component.EmptyState
 
 fun shareArticle(context: Context, article: NewsArticle) {
     val shareText = buildString {
-        append("📰 *${article.title}*\n\n")
-        val summary = article.aiSummary
+        append("⚡ *FLASHNEWS AI* • Sinteză Inteligentă\n")
+        append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+        append("📌 *${article.title.trim()}*\n\n")
+        val summary = article.aiSummary?.trim()
         if (!summary.isNullOrBlank()) {
-            append("🤖 *Sinteză AI:*\n$summary\n\n")
+            append("💡 *CONCLUZIE CHEIE:*\n$summary\n\n")
         } else if (!article.description.isNullOrBlank()) {
-            append("${article.description}\n\n")
+            append("${article.description?.trim()}\n\n")
         }
-        append("🔗 Sursă: ${article.sourceName ?: "FlashNews AI"}\n")
-        append("${article.url}\n\n")
-        append("Trimis prin FlashNews AI ⚡")
+        val impact = article.aiLocalImpact?.trim()
+        if (!impact.isNullOrBlank()) {
+            append("🇷🇴 *IMPACT ROMÂNIA:* $impact\n\n")
+        }
+        val bias = article.aiBias?.trim()
+        if (!bias.isNullOrBlank() && bias != "NEUTRU") {
+            append("⚖️ *Analiză editorială:* $bias\n\n")
+        }
+        append("🔗 *Articol complet:* ${article.url}\n")
+        append("📰 Sursă: ${article.sourceName ?: "Presă"}\n\n")
+        append("📲 Trimis prin FlashNews AI — Știri sintetizate și fără fake news.")
     }
     val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        putExtra(Intent.EXTRA_SUBJECT, article.title)
         putExtra(Intent.EXTRA_TEXT, shareText)
         type = "text/plain"
     }
-    context.startActivity(Intent.createChooser(sendIntent, "Distribuie știrea"))
+    context.startActivity(Intent.createChooser(sendIntent, "Distribuie sinteza FlashNews AI"))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +97,10 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
     val isChatLoading by viewModel.isChatLoading.collectAsState()
     val readArticleUrls by viewModel.readArticleUrls.collectAsState()
     val isCommuteMode by viewModel.isCommuteMode.collectAsState()
+    val aiTone by viewModel.aiTone.collectAsState()
+    val articlesReadCount by viewModel.articlesReadCount.collectAsState()
+    val audioMinutesListened by viewModel.audioMinutesListened.collectAsState()
+    var showReadingStatsSheet by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(pageCount = { articles.itemCount })
     val coroutineScope = rememberCoroutineScope()
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
@@ -214,6 +229,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
 
     LaunchedEffect(selectedArticleForDetail) {
         selectedArticleForDetail?.let { article ->
+            viewModel.recordArticleRead(article)
             viewModel.loadAiInsights(article)
         }
     }
@@ -338,6 +354,7 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
         },
         onSearchClick = onSearchClick,
         onRadioClick = { showRadioSheet = true },
+        onStatsClick = { showReadingStatsSheet = true },
         onCatalogClick = { showCatalogSheet = true }
     )
 
@@ -362,6 +379,8 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
                 isChatLoading = isChatLoading,
                 perspective360 = perspective360,
                 isPerspectiveLoading = isPerspectiveLoading,
+                selectedTone = aiTone,
+                onToneSelected = { viewModel.setAiTone(it) },
                 onLoad360Perspective = { viewModel.load360Perspective(selectedArticleForDetail!!) },
                 onPlayTts = onPlayText,
                 onAskQuestion = { q -> viewModel.askAiAboutArticle(selectedArticleForDetail!!, q) },
@@ -403,6 +422,14 @@ fun FeedScreen(viewModel: FeedViewModel, onSearchClick: () -> Unit) {
             onDismiss = { showCatalogSheet = false }
         )
     }
+
+    if (showReadingStatsSheet) {
+        ReadingStatsSheet(
+            articlesReadCount = articlesReadCount,
+            audioMinutesListened = audioMinutesListened,
+            onDismiss = { showReadingStatsSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -415,6 +442,7 @@ fun TopBar(
     onToggleCommuteMode: () -> Unit = {},
     onSearchClick: () -> Unit,
     onRadioClick: () -> Unit = {},
+    onStatsClick: () -> Unit = {},
     onCatalogClick: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
@@ -505,6 +533,12 @@ fun TopBar(
                     modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
                 ) {
                     Icon(Icons.Default.Radio, contentDescription = "Radio AI Buletin", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                }
+                IconButton(
+                    onClick = onStatsClick,
+                    modifier = Modifier.size(38.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                ) {
+                    Icon(Icons.Default.BarChart, contentDescription = "Statistici lectură", tint = Color.White, modifier = Modifier.size(20.dp))
                 }
                 IconButton(
                     onClick = onCatalogClick,
@@ -734,6 +768,8 @@ fun ArticleDetailContent(
     isChatLoading: Boolean,
     perspective360: String? = null,
     isPerspectiveLoading: Boolean = false,
+    selectedTone: String = "EXECUTIV",
+    onToneSelected: (String) -> Unit = {},
     onLoad360Perspective: () -> Unit = {},
     onPlayTts: (String) -> Unit = {},
     onAskQuestion: (String) -> Unit,
@@ -1044,8 +1080,53 @@ fun ArticleDetailContent(
             }
         }
 
+        // 🎭 TON ANALIZĂ AI (EXECUTIV / SIMPLU / CRITIC)
+        Spacer(modifier = Modifier.height(20.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Ton analiză AI:",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "EXECUTIV" to "💼 Executiv",
+                    "SIMPLU" to "💡 Simplu",
+                    "CRITIC" to "🔍 Critic"
+                ).forEach { (toneKey, label) ->
+                    val isSelected = selectedTone.equals(toneKey, ignoreCase = true)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                else Color.White.copy(alpha = 0.08f)
+                            )
+                            .clickable { onToneSelected(toneKey) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+
         // 💬 ÎNTREABĂ ȘTIREA - CIPURI RAPIDE
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(18.dp))
         Text("Întreabă AI despre acest subiect:", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
         Spacer(modifier = Modifier.height(8.dp))
         val quickQuestions = listOf(

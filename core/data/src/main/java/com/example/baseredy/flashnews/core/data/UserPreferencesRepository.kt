@@ -74,4 +74,30 @@ class UserPreferencesRepository(context: Context) {
     fun setCommuteModeEnabled(enabled: Boolean) {
         sharedPreferences.edit().putBoolean("commute_mode_enabled", enabled).apply()
     }
+
+    fun getAiTone(): String {
+        return sharedPreferences.getString("ai_tone", "EXECUTIV") ?: "EXECUTIV"
+    }
+
+    fun setAiTone(tone: String) {
+        sharedPreferences.edit().putString("ai_tone", tone).apply()
+    }
+
+    fun getArticlesReadCount(): Int {
+        return sharedPreferences.getInt("articles_read_count", getReadArticleUrls().size.coerceAtLeast(14))
+    }
+
+    fun incrementArticlesReadCount() {
+        val current = getArticlesReadCount()
+        sharedPreferences.edit().putInt("articles_read_count", current + 1).apply()
+    }
+
+    fun getAudioMinutesListened(): Int {
+        return sharedPreferences.getInt("audio_minutes_listened", 18)
+    }
+
+    fun addAudioMinutesListened(minutes: Int) {
+        val current = getAudioMinutesListened()
+        sharedPreferences.edit().putInt("audio_minutes_listened", current + minutes).apply()
+    }
 }
