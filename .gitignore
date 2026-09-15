@@ -26,3 +26,21 @@ feature/search/build/
 .gemini/
 .vscode/
 AGENTS.md
+
+
+# Secrets & Local Environments
+.env
+.env.*
+*.fdb
+*.gdb
+*.db
+*.sqlite
+.agents/
+.artifacts/
+.gemini/
+.idea/
+.vscode/
+build/
+dist/
+bin/
+obj/
