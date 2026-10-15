@@ -44,3 +44,8 @@ build/
 dist/
 bin/
 obj/
+
+# Internal documentation & marketing assets
+docs/
+reclame_tiktok/
+
