@@ -49,3 +49,15 @@ obj/
 docs/
 reclame_tiktok/
 
+
+
+# ====================================================================
+# AI Assistants, Internal Skills & IDE Tracking
+# ====================================================================
+.agents/
+.artifacts/
+.gemini/
+skills/
+AGENTS.md
+GEMINI.md
+
